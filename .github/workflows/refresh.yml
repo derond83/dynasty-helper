@@ -23,7 +23,11 @@ jobs:
     outputs:
       refresh: ${{ steps.refresh.outcome }}
     steps:
+      # Always build from the latest main. A re-run otherwise reuses the run's original
+      # commit, which is behind main once that run's first attempt pushed new data.
       - uses: actions/checkout@v7
+        with:
+          ref: main
 
       - uses: actions/setup-python@v7
         with:
@@ -46,7 +50,9 @@ jobs:
             echo "No data changes."
           else
             git commit -m "Refresh values and league data ($(date -u +%Y-%m-%d))"
-            git push
+            # Pick up anything pushed to main while this run was working.
+            git pull --rebase origin main
+            git push origin HEAD:main
           fi
 
       - uses: actions/configure-pages@v6
