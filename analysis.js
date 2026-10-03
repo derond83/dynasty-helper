@@ -18,7 +18,7 @@
   const DEFAULTS = {
     source: "ktc",      // offensive values: "ktc" or "dd"
     winNow: 0,          // 0 = pure dynasty, 1 = this season only
-    idpFloor: 6,        // fewest IDP players to carry (starters + backups)
+    idpSpots: 6,        // active roster spots reserved for IDP; the rest are offense
     bigPlayWeight: 0.35, // share of a player's own INT/FF/FR/TD/safety/block points that counts; the rest is position average
     fpWeight: 0.3,      // pull of FantasyPros dynasty rankings on IDP value
     multiBonus: 0.05,   // boost for DL/LB or LB/DB eligibility
@@ -299,6 +299,8 @@
           base.ppg = r ? r.ppg : null;
           base.snapShare = r ? r.snapShare : null;
           base.tklPg = r ? r.tklPg : null;
+          // Points per game above a waiver-level player at his best IDP position.
+          base.par = v.value - Math.min(...groups.map((g) => idpVals.repl[g] ?? Infinity));
         }
       }
       info[id] = base;
@@ -393,15 +395,17 @@
     const shortfalls = (ids) => {
       const s = {};
       for (const g of GROUPS) s[g] = Math.max(0, MIN_DEPTH[g] - depthOf(ids, g));
-      s.IDP = Math.max(0, cfg.idpFloor - idpCount(ids));
+      // Offense and IDP each keep their own share of the active roster.
+      const idpN = idpCount(ids), offN = ids.length - idpN;
+      s["IDP spots"] = Math.max(0, cfg.idpSpots - idpN);
+      s["too many IDP"] = Math.max(0, idpN - cfg.idpSpots);
+      s["offense spots"] = Math.max(0, maxActive - cfg.idpSpots - offN);
       return s;
     };
     const shortTotal = (s) => Object.values(s).reduce((a, b) => a + b, 0);
 
     const valueRank = teams.map((t) => t.value).filter((v) => v > me.value + 1e-9).length + 1;
     const idpRank = teams.map((t) => t.idpValue).filter((v) => v > me.idpValue + 1e-9).length + 1;
-    const lineupRank = teams.map((t) => t.lineup.off.total + t.lineup.idp.total)
-      .filter((v) => v > me.lineup.off.total + me.lineup.idp.total + 1e-9).length + 1;
 
     const myNeeds = needsFor(me.active);
     const positions = GROUPS.map((g) => {
@@ -436,17 +440,13 @@
         if (Object.keys(s).some((k) => s[k] > before[k])) continue; // creates a shortfall
         const fixes = shortTotal(before) - shortTotal(s);
         const drop = dropId ? info[dropId] : null;
-        // At or above the IDP floor, an IDP add takes an IDP spot; offensive value isn't spent on it.
-        if (drop && add.domain === "idp" && drop.domain === "off" && idpCount(ids) >= cfg.idpFloor) continue;
         let kind;
         if (!drop) kind = "open";
-        else if (fixes > 0) kind = "balance";
-        else if (drop.domain === add.domain) { if (!ratioOk(add, drop)) continue; kind = "upgrade"; }
-        else if (add.domain === "off" && idpCount(ids) > cfg.idpFloor) {
-          // IDP beyond the floor competes for bench spots on equal terms.
-          if (add.norm < drop.norm * (1 + cfg.minGain)) continue;
-          kind = "surplus";
-        } else continue;
+        else if (fixes > 0) kind = "balance";                  // fixes a position or the IDP/offense split
+        else if (drop.domain !== add.domain) continue;          // otherwise offense and IDP never trade spots
+        else if (ratioOk(add, drop)) kind = "upgrade";
+        else continue;
+        // Ranks options by share of a typical starter on each player's own side of the ball.
         const gain = add.norm - (drop ? drop.norm : 0);
         const score = fixes * 10 + gain;
         if (!best || score > best.score) best = { drop, kind, fixes, gain, score };
@@ -458,8 +458,10 @@
     const moves = [];
     let roster = me.active.slice();
     const usedFa = new Set();
-    const candidates = pool.filter((p) => !UNAVAILABLE.has(p.injury))
-      .sort((a, b) => b.norm - a.norm).slice(0, 150);
+    // The best 100 free agents on each side of the ball (the IDP wire is deep).
+    const candidates = ["off", "idp"].flatMap((side) => pool
+      .filter((p) => p.domain === side && !UNAVAILABLE.has(p.injury))
+      .sort((a, b) => b.value - a.value).slice(0, 100));
     for (let step = 0; step < 6; step++) {
       const nd = needsFor(roster);
       let chosen = null;
@@ -471,14 +473,12 @@
         if (!chosen || score > chosen.score) chosen = { p, d, score };
       }
       if (!chosen) break;
-      const before = lineupFor(roster, info, offSlots, idpSlots);
       const next = roster.filter((id) => !chosen.d.drop || id !== chosen.d.drop.id).concat(chosen.p.id);
       const after = lineupFor(next, info, offSlots, idpSlots);
       moves.push({
-        add: chosen.p, drop: chosen.d.drop, kind: chosen.d.kind,
+        side: chosen.p.domain, add: chosen.p, drop: chosen.d.drop, kind: chosen.d.kind,
         fixes: Object.entries(shortfalls(roster)).filter(([k, v]) => v > shortfalls(next)[k]).map(([k]) => k),
         starts: chosen.p.id in after.assign,
-        lineupGain: (after.off.total + after.idp.total) - (before.off.total + before.idp.total),
         gain: chosen.d.gain,
       });
       usedFa.add(chosen.p.id);
@@ -486,14 +486,6 @@
       roster = next;
     }
 
-    // Depth tier for mixed offense + IDP lists: a player's rank on his side of the ball
-    // divided by how many players the league rosters on that side (1.0 = last rostered).
-    for (const domain of ["off", "idp"]) {
-      const ranked = Object.values(info).filter((p) => p.domain === domain && p.value > 0).sort((a, b) => b.value - a.value);
-      const held = [...rostered.keys()].filter((id) => info[id].domain === domain).length || 1;
-      ranked.forEach((p, i) => { p.tier = (i + 1) / held; });
-    }
-    for (const p of Object.values(info)) if (p.tier == null) p.tier = Infinity;
     // Waiver wire, each with the swap it would take on today's roster.
     const waivers = pool.map((p) => {
       const d = bestDrop(p, me.active, locked);
@@ -504,12 +496,12 @@
         drop: d ? (d.drop ? d.drop.id : "open") : null, dropKind: d ? d.kind : null,
       };
     }).sort((a, b) => b.fit - a.fit);
-    // Same fit score for your own players, so both sort together in one list.
+    // Same fit score for your own players, so roster and wire sort together (within a side).
     for (const id of me.all) info[id].fit = info[id].norm * (1 + NEED_WEIGHT * needOf(info[id], myNeeds));
 
     const standings = teams.map((t) => ({
       rosterId: t.roster.roster_id, value: t.value, idpValue: t.idpValue,
-      lineup: t.lineup.off.total + t.lineup.idp.total, players: t.all.length,
+      offStarters: t.lineup.off.total * scale.off, players: t.all.length,
     })).sort((a, b) => b.value - a.value);
 
     return {
@@ -520,7 +512,7 @@
         rosterId: me.roster.roster_id,
         active: me.active.map((id) => info[id]), taxi: me.taxi.map((id) => info[id]), ir: me.ir.map((id) => info[id]),
         lineup: me.lineup.assign, rosterCount: me.active.length,
-        value: me.value, valueRank, idpValue: me.idpValue, idpRank, lineupRank,
+        value: me.value, valueRank, idpValue: me.idpValue, idpRank,
         idpCount: idpCount(me.active), shortfalls: shortfalls(me.active),
         locked: me.all.filter((id) => locked.has(id)).length,
         faab: ((league.settings && league.settings.waiver_budget) || 0) -

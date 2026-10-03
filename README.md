@@ -14,7 +14,7 @@ and keep positions balanced.
 
 | File | What it is |
 | --- | --- |
-| `index.html` | The dashboard. Your roster and the waiver wire share one Players table, with your players highlighted. |
+| `index.html` | The dashboard. Your roster and the waiver wire share one Players table (offense or IDP at a time), with your players highlighted. |
 | `analysis.js` | Value lookup, IDP model, lineup optimizer, positional scarcity and the move planner (no DOM). |
 | `values.js` | Offensive dynasty and redraft values from KeepTradeCut and Dynasty Daddy, keyed by Sleeper id. |
 | `idp.js` | Sleeper IDP stat lines for the last three seasons, plus FantasyPros dynasty IDP rankings. |
@@ -72,11 +72,13 @@ best free agent with a typical starter.
 
 **Moves**, planned one at a time:
 
+- Offense and IDP are managed separately, because their values aren't on the same scale (and IDP trade value is low).
+  A set number of active roster spots are IDP (6 by default, changeable in Tuning); the rest are offense.
+  A move only swaps an offensive player for a defender, or back, to restore that split.
 - A roster keeps at least 2 QB, 3 RB, 3 WR, 2 TE, 2 DL, 2 LB and 2 DB. DL/LB and LB/DB players count for both.
-  It also keeps the IDP minimum (6 by default). Moves that fix a shortfall come first.
-- Otherwise a swap must add 12% or more value at the same position group, and at least 150 offensive value or 0.5 IDP points per game.
-- At or above the IDP minimum, an IDP add replaces an IDP player, so offensive value isn't spent on defense.
-  Above the minimum, extra IDP and offense compete for bench spots as a share of a typical league starter.
+  Moves that fix a shortfall come first.
+- Otherwise a swap stays on one side of the ball and must add 12% or more value, and at least 150 offensive value
+  or 0.5 IDP points per game.
 - Taxi (locked in season) and IR players are never dropped, and neither is any player you **lock** in the Players table
   or on a move card. Locks are saved in your browser. Injured free agents (IR, PUP, suspended) stay on the wire but aren't suggested.
 
