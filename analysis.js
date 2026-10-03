@@ -115,7 +115,7 @@
         const adj = stable + cfg.bigPlayWeight * big + (1 - cfg.bigPlayWeight) * bigRate[i][g] * snaps;
         ptsW += w[i] * adj; gamesW += w[i] * gp; snapsW += w[i] * snaps;
         const line = {
-          season: years[i], gp, snaps, snapShare: row[f.tm_def_snp] ? snaps / row[f.tm_def_snp] : null,
+          season: years[i], gp, snaps, snapShare: row[f.tm_def_snp] ? Math.min(1, snaps / row[f.tm_def_snp]) : null,
           ppg: (stable + big) / gp, adjPpg: adj / gp,
           tklPg: ((row[f.idp_tkl_solo] || 0) + (row[f.idp_tkl_ast] || 0)) / gp,
           sacks: row[f.idp_sack] || 0, ints: row[f.idp_int] || 0, bigShare: stable + big ? big / (stable + big) : 0,
@@ -249,6 +249,8 @@
    */
   function analyze(data, values, idpData, myRosterId, options) {
     const cfg = { ...DEFAULTS, ...(options || {}) };
+    // Players the user has locked are never suggested as drops.
+    const locked = new Set((cfg.locked || []).map(String));
     const { league, rosters, players } = data;
     const scoring = league.scoring_settings || {};
     const season = Number((data.state && data.state.season) || league.season);
@@ -282,7 +284,7 @@
         id, name: p.full_name || `Player ${id}`, team: p.team || "FA", groups, domain,
         age: p.age || null, injury: p.injury_status || null, depth: p.depth_chart_position || null,
         trending: trending.get(id) || 0, searchRank: p.search_rank || 1e9, rookie: p.years_exp === 0,
-        value: 0, norm: 0,
+        locked: locked.has(id), value: 0, norm: 0,
       };
       if (domain === "off") {
         const v = offValue(id, src);
@@ -452,7 +454,7 @@
       return best;
     }
 
-    const protectedIds = new Set(); // added players aren't dropped later in the plan
+    const protectedIds = new Set(locked); // locked players, and players added earlier in the plan
     const moves = [];
     let roster = me.active.slice();
     const usedFa = new Set();
@@ -486,7 +488,7 @@
 
     // Waiver wire, each with the swap it would take on today's roster.
     const waivers = pool.map((p) => {
-      const d = bestDrop(p, me.active, new Set());
+      const d = bestDrop(p, me.active, locked);
       return {
         ...p,
         fit: p.norm * (1 + NEED_WEIGHT * needOf(p, myNeeds)),
@@ -510,6 +512,7 @@
         lineup: me.lineup.assign, rosterCount: me.active.length,
         value: me.value, valueRank, idpValue: me.idpValue, idpRank, lineupRank,
         idpCount: idpCount(me.active), shortfalls: shortfalls(me.active),
+        locked: me.all.filter((id) => locked.has(id)).length,
         faab: ((league.settings && league.settings.waiver_budget) || 0) -
           ((me.roster.settings && me.roster.settings.waiver_budget_used) || 0),
       },

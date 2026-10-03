@@ -194,6 +194,10 @@ tr.group td { background: var(--sunk); font-family: var(--font-display); font-we
 .slot { font-family: var(--font-display); font-weight: 700; font-size: 1rem; white-space: nowrap; }
 .fitbar { display: inline-block; width: 54px; height: 6px; background: var(--sunk); border-radius: 3px; vertical-align: middle; margin-right: 6px; border: 1px solid var(--line); overflow: hidden; }
 .fitbar i { display: block; height: 100%; background: var(--accent); }
+.lock { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 3px 9px; min-height: 30px; cursor: pointer; font-size: .78rem; font-weight: 600; color: var(--muted); white-space: nowrap; }
+.lock:hover { border-color: var(--ink); color: var(--ink); }
+.lock[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--bg); }
+.move .side .lock { justify-self: start; margin-top: 4px; }
 .more { justify-self: start; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 8px 14px; min-height: 40px; cursor: pointer; font-weight: 600; }
 .more:hover { border-color: var(--ink); }
 
@@ -329,12 +333,12 @@ code { background: var(--sunk); border: 1px solid var(--line); border-radius: 4p
   <section class="section" aria-labelledby="roster-h">
     <div class="section-head">
       <h2 id="roster-h">Your roster</h2>
-      <p>Best lineup by value. Your lineup in Sleeper may differ. Click a name for details.</p>
+      <p>Best lineup by value. Your lineup in Sleeper may differ. Click a name for details. Lock a player to keep him out of drop suggestions (saved in this browser).</p>
     </div>
     <div class="table-wrap">
       <table>
         <thead><tr>
-          <th>Slot</th><th>Player</th><th>Pos</th><th class="num">Age</th><th class="num">Value</th><th>Detail</th><th>Status</th>
+          <th>Slot</th><th>Player</th><th>Pos</th><th class="num">Age</th><th class="num">Value</th><th>Detail</th><th>Status</th><th>Keep</th>
         </tr></thead>
         <tbody id="roster-body"></tbody>
       </table>
@@ -359,7 +363,7 @@ code { background: var(--sunk); border: 1px solid var(--line); border-radius: 4p
   <footer>
     <p><strong>Offense.</strong> Values come from <a href="https://keeptradecut.com/dynasty-rankings" target="_blank" rel="noopener">KeepTradeCut</a> (1QB) or <a href="https://dynasty-daddy.com/" target="_blank" rel="noopener">Dynasty Daddy</a>, picked in the menu at the top. The other source is shown alongside for comparison. With the win-now setting above 0, each source's redraft values are blended in.</p>
     <p><strong>IDP.</strong> Neither source values defenders, so IDP value is built from Sleeper stats for the last three seasons, scored with this league's settings. This season counts most. A player's own big plays are mostly replaced by the position average for his snaps, so tackles and sacks drive value. His per-snap production is projected at the snaps he's playing now, short samples are pulled toward a replacement-level player, and value is discounted with age. It's then blended with the free <a href="https://www.fantasypros.com/nfl/rankings/dynasty-lb.php" target="_blank" rel="noopener">FantasyPros dynasty DL / LB / DB rankings</a>: the #k player there is worth what the model's #k player is worth. The unit is roughly points per game.</p>
-    <p><strong>Moves.</strong> A roster keeps at least 2 QB, 3 RB, 3 WR, 2 TE, and 2 eligible players at each of DL, LB and DB (DL/LB and LB/DB players count for both), plus the IDP minimum from the tuning panel. Moves that fix a shortfall come first. At or above the IDP minimum, an IDP add replaces an IDP player, so offensive value isn't spent on defense. Offense and IDP are compared as a share of a typical league starter only for bench spots above that minimum. Taxi and IR players are never dropped.</p>
+    <p><strong>Moves.</strong> A roster keeps at least 2 QB, 3 RB, 3 WR, 2 TE, and 2 eligible players at each of DL, LB and DB (DL/LB and LB/DB players count for both), plus the IDP minimum from the tuning panel. Moves that fix a shortfall come first. At or above the IDP minimum, an IDP add replaces an IDP player, so offensive value isn't spent on defense. Offense and IDP are compared as a share of a typical league starter only for bench spots above that minimum. Taxi and IR players are never dropped, and neither is anyone you lock on the roster table.</p>
     <p><strong>Refreshing data.</strong> Your league loads live from Sleeper every time you open this page. If Sleeper can't be reached, the page falls back to a saved snapshot. A scheduled GitHub Action refreshes values, IDP stats and rankings once a day. To refresh sooner, run the "Refresh data and deploy" workflow from the repository's Actions tab.</p>
     <p id="match-note"></p>
   </footer>
@@ -398,6 +402,7 @@ code { background: var(--sunk); border: 1px solid var(--line); border-radius: 4p
     get(k) { try { return localStorage.getItem(STORE + k); } catch (e) { return null; } },
     set(k, v) { try { localStorage.setItem(STORE + k, v); } catch (e) { /* storage blocked */ } },
   };
+  const loadLocked = () => { try { return JSON.parse(store.get("locked") || "[]") || []; } catch (e) { return []; } };
   const loadOpts = () => { try { return JSON.parse(store.get("options") || "{}") || {}; } catch (e) { return {}; } };
 
   const state = {
@@ -406,6 +411,7 @@ code { background: var(--sunk); border: 1px solid var(--line); border-radius: 4p
     opts: { ...A.DEFAULTS, ...loadOpts() },
     wirePos: "all", wireSort: "fit", wireQuery: "", wireShown: PAGE,
     open: new Set(),
+    locked: new Set(loadLocked()),
   };
   let result = null;
 
@@ -457,6 +463,10 @@ code { background: var(--sunk); border: 1px solid var(--line); border-radius: 4p
       return `<span class="detail-cell" title="Most recent season with 2+ games">${bits.join(" · ")}</span>`;
     }
     return "";
+  }
+  function lockBtn(p) {
+    const on = state.locked.has(p.id);
+    return `<button type="button" class="lock" data-lock="${esc(p.id)}" aria-pressed="${on}" aria-label="${on ? "Unlock" : "Lock"} ${esc(p.name)}" title="${on ? "Locked: never suggested as a drop. Click to unlock." : "Lock to keep him out of drop suggestions"}">${on ? "🔒 Locked" : "Lock"}</button>`;
   }
   function nameCell(p) {
     return `<div class="pname"><button type="button" data-open="${esc(p.id)}" aria-expanded="${state.open.has(p.id)}">${esc(p.name)}</button>
@@ -523,7 +533,7 @@ code { background: var(--sunk); border: 1px solid var(--line); border-radius: 4p
       [`${ordinal(me.valueRank)}<small> of ${n}</small>`, `Offensive value · ${esc(result.source.label)} (${int(me.value)})`],
       [`${ordinal(me.idpRank)}<small> of ${n}</small>`, "IDP starters, by IDP value"],
       [short.length ? short.join(" · ") : "None", "Depth shortfalls"],
-      [`${me.rosterCount}<small> / ${result.maxActive}</small>`, `Active roster${me.taxi.length ? ` · ${me.taxi.length} taxi` : ""}${me.ir.length ? ` · ${me.ir.length} IR` : ""}`],
+      [`${me.rosterCount}<small> / ${result.maxActive}</small>`, `Active roster${me.taxi.length ? ` · ${me.taxi.length} taxi` : ""}${me.ir.length ? ` · ${me.ir.length} IR` : ""}${me.locked ? ` · ${me.locked} locked` : ""}`],
       [`${me.idpCount}<small> / ${result.cfg.idpFloor} min</small>`, "IDP players"],
       [`$${me.faab}`, "FAAB remaining"],
     ];
@@ -574,7 +584,7 @@ code { background: var(--sunk); border: 1px solid var(--line); border-radius: 4p
 
   function renderMoves() {
     const cfg = result.cfg;
-    $("moves-note").textContent = `Planned in order, so later moves account for earlier ones. Fixing a depth shortfall comes first. Otherwise a swap must add ${Math.round(cfg.minGain * 100)}% or more value at the same position group, and offense never gives up value for IDP while you carry ${cfg.idpFloor} or more defenders.`;
+    $("moves-note").textContent = `Planned in order, so later moves account for earlier ones. Fixing a depth shortfall comes first. Otherwise a swap must add ${Math.round(cfg.minGain * 100)}% or more value at the same position group, and offense never gives up value for IDP while you carry ${cfg.idpFloor} or more defenders.${result.me.locked ? ` ${result.me.locked} locked player${result.me.locked > 1 ? "s are" : " is"} never dropped.` : ""}`;
     const moves = result.moves;
     if (!moves.length) {
       const best = result.waivers[0];
@@ -606,7 +616,7 @@ code { background: var(--sunk); border: 1px solid var(--line); border-radius: 4p
           <span class="verb drop">${drop ? "Drop" : "Roster spot"}</span>
           <span class="nm">${drop ? esc(drop.name) : "Open"}</span>
           <span class="meta">${drop ? side(drop) : "No drop needed"}</span>
-          ${drop ? `<span class="meta">${detailCell(drop)}</span>` : ""}
+          ${drop ? `<span class="meta">${detailCell(drop)}</span>${lockBtn(drop)}` : ""}
         </div>
         <div class="why">${why.join("")}</div>
       </article>`;
@@ -669,12 +679,13 @@ code { background: var(--sunk); border: 1px solid var(--line); border-radius: 4p
         <td class="num">${valueCell(p)}</td>
         <td>${detailCell(p)}</td>
         <td>${p.injury ? `<span class="tag inj">${esc(p.injury)}</span>` : '<span class="muted">Active</span>'}</td>
-      </tr>${state.open.has(p.id) ? detailRow(p, 7) : ""}`;
+        <td>${slot === "TX" || slot === "IR" ? '<span class="muted small">Never dropped</span>' : lockBtn(p)}</td>
+      </tr>${state.open.has(p.id) ? detailRow(p, 8) : ""}`;
     // Slots repeat (RB, RB, FLEX, FLEX), so list starters in slot order.
-    let html = `<tr class="group"><td colspan="7">Starters</td></tr>` + starters.map((p) => row(p, me.lineup[p.id])).join("");
-    html += `<tr class="group"><td colspan="7">Bench</td></tr>` + (bench.map((p) => row(p, "BN")).join("") || `<tr><td colspan="7" class="muted">Empty</td></tr>`);
-    if (me.taxi.length) html += `<tr class="group"><td colspan="7">Taxi squad <span class="muted" style="text-transform:none;font-family:var(--font-body);font-weight:400">· locked during the season, never suggested as drops</span></td></tr>` + me.taxi.map((p) => row(p, "TX")).join("");
-    if (me.ir.length) html += `<tr class="group"><td colspan="7">Injured reserve</td></tr>` + me.ir.map((p) => row(p, "IR")).join("");
+    let html = `<tr class="group"><td colspan="8">Starters</td></tr>` + starters.map((p) => row(p, me.lineup[p.id])).join("");
+    html += `<tr class="group"><td colspan="8">Bench</td></tr>` + (bench.map((p) => row(p, "BN")).join("") || `<tr><td colspan="8" class="muted">Empty</td></tr>`);
+    if (me.taxi.length) html += `<tr class="group"><td colspan="8">Taxi squad <span class="muted" style="text-transform:none;font-family:var(--font-body);font-weight:400">· locked during the season, never suggested as drops</span></td></tr>` + me.taxi.map((p) => row(p, "TX")).join("");
+    if (me.ir.length) html += `<tr class="group"><td colspan="8">Injured reserve</td></tr>` + me.ir.map((p) => row(p, "IR")).join("");
     $("roster-body").innerHTML = html;
   }
 
@@ -694,7 +705,7 @@ code { background: var(--sunk); border: 1px solid var(--line); border-radius: 4p
   }
 
   function renderAll() {
-    result = A.analyze(state.data, values, idp, state.rosterId, state.opts);
+    result = A.analyze(state.data, values, idp, state.rosterId, { ...state.opts, locked: [...state.locked] });
     renderHeader();
     renderSummary();
     renderSettings();
@@ -742,6 +753,17 @@ code { background: var(--sunk); border: 1px solid var(--line); border-radius: 4p
   $("wire-search").addEventListener("input", (e) => { state.wireQuery = e.target.value; state.wireShown = PAGE; renderWire(); });
   $("wire-more").addEventListener("click", () => { state.wireShown += PAGE; renderWire(); });
   document.addEventListener("click", (e) => {
+    const l = e.target.closest("button[data-lock]");
+    if (l) {
+      const id = l.dataset.lock;
+      state.locked.has(id) ? state.locked.delete(id) : state.locked.add(id);
+      store.set("locked", JSON.stringify([...state.locked]));
+      renderAll();
+      // The re-render replaced the button; keep keyboard focus on its replacement.
+      const again = document.querySelector(`button[data-lock="${CSS.escape(id)}"]`);
+      if (again) again.focus();
+      return;
+    }
     const b = e.target.closest("button[data-open]"); if (!b) return;
     const id = b.dataset.open;
     state.open.has(id) ? state.open.delete(id) : state.open.add(id);

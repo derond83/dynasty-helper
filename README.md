@@ -77,7 +77,8 @@ best free agent with a typical starter.
 - Otherwise a swap must add 12% or more value at the same position group, and at least 150 offensive value or 0.5 IDP points per game.
 - At or above the IDP minimum, an IDP add replaces an IDP player, so offensive value isn't spent on defense.
   Above the minimum, extra IDP and offense compete for bench spots as a share of a typical league starter.
-- Taxi (locked in season) and IR players are never dropped. Injured free agents (IR, PUP, suspended) stay on the wire but aren't suggested.
+- Taxi (locked in season) and IR players are never dropped, and neither is any player you **lock** on the roster table
+  or on a move card. Locks are saved in your browser. Injured free agents (IR, PUP, suspended) stay on the wire but aren't suggested.
 
 Every weight above can be changed in the page's **Tuning** panel (saved in your browser). The constants are at the top of `analysis.js`.
 
