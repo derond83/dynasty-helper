@@ -486,6 +486,14 @@
       roster = next;
     }
 
+    // Depth tier for mixed offense + IDP lists: a player's rank on his side of the ball
+    // divided by how many players the league rosters on that side (1.0 = last rostered).
+    for (const domain of ["off", "idp"]) {
+      const ranked = Object.values(info).filter((p) => p.domain === domain && p.value > 0).sort((a, b) => b.value - a.value);
+      const held = [...rostered.keys()].filter((id) => info[id].domain === domain).length || 1;
+      ranked.forEach((p, i) => { p.tier = (i + 1) / held; });
+    }
+    for (const p of Object.values(info)) if (p.tier == null) p.tier = Infinity;
     // Waiver wire, each with the swap it would take on today's roster.
     const waivers = pool.map((p) => {
       const d = bestDrop(p, me.active, locked);
@@ -496,6 +504,8 @@
         drop: d ? (d.drop ? d.drop.id : "open") : null, dropKind: d ? d.kind : null,
       };
     }).sort((a, b) => b.fit - a.fit);
+    // Same fit score for your own players, so both sort together in one list.
+    for (const id of me.all) info[id].fit = info[id].norm * (1 + NEED_WEIGHT * needOf(info[id], myNeeds));
 
     const standings = teams.map((t) => ({
       rosterId: t.roster.roster_id, value: t.value, idpValue: t.idpValue,

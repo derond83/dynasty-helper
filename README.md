@@ -14,7 +14,7 @@ and keep positions balanced.
 
 | File | What it is |
 | --- | --- |
-| `index.html` | The dashboard. |
+| `index.html` | The dashboard. Your roster and the waiver wire share one Players table, with your players highlighted. |
 | `analysis.js` | Value lookup, IDP model, lineup optimizer, positional scarcity and the move planner (no DOM). |
 | `values.js` | Offensive dynasty and redraft values from KeepTradeCut and Dynasty Daddy, keyed by Sleeper id. |
 | `idp.js` | Sleeper IDP stat lines for the last three seasons, plus FantasyPros dynasty IDP rankings. |
@@ -77,7 +77,7 @@ best free agent with a typical starter.
 - Otherwise a swap must add 12% or more value at the same position group, and at least 150 offensive value or 0.5 IDP points per game.
 - At or above the IDP minimum, an IDP add replaces an IDP player, so offensive value isn't spent on defense.
   Above the minimum, extra IDP and offense compete for bench spots as a share of a typical league starter.
-- Taxi (locked in season) and IR players are never dropped, and neither is any player you **lock** on the roster table
+- Taxi (locked in season) and IR players are never dropped, and neither is any player you **lock** in the Players table
   or on a move card. Locks are saved in your browser. Injured free agents (IR, PUP, suspended) stay on the wire but aren't suggested.
 
 Every weight above can be changed in the page's **Tuning** panel (saved in your browser). The constants are at the top of `analysis.js`.
