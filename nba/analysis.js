@@ -30,6 +30,7 @@
   // Injury designations that keep a player out of trade ideas.
   const UNAVAILABLE = new Set(["OUT", "Out", "IR", "Sus", "SUS"]);
   const Trades = root.TradeEngine || (typeof require === "function" ? require("../js/trades.js") : null);
+  const Draft = root.DraftBoard || (typeof require === "function" ? require("../js/draft.js") : null);
 
   function norm(s) {
     return (s || "")
@@ -163,25 +164,7 @@
     return needs;
   }
 
-  // Picks the given roster currently owns in a pending draft, in pick order.
-  function ownedPicks(draft, teamsN, rosterId) {
-    const slotToRoster = draft.slot_to_roster_id || {};
-    const traded = (draft.traded_picks || []).filter((t) => String(t.season) === String(draft.season));
-    const picks = [];
-    for (let round = 1; round <= (draft.rounds || 0); round++) {
-      for (let slot = 1; slot <= teamsN; slot++) {
-        const orig = slotToRoster[slot];
-        if (orig == null) continue;
-        const pick = draft.type === "snake" && round % 2 === 0 ? teamsN + 1 - slot : slot;
-        const t = traded.find((x) => x.round === round && x.roster_id === orig);
-        const owner = t ? t.owner_id : orig;
-        if (String(owner) === String(rosterId)) {
-          picks.push({ round, pick, overall: (round - 1) * teamsN + pick, fromRoster: orig });
-        }
-      }
-    }
-    return picks.sort((a, b) => a.overall - b.overall);
-  }
+
 
   function needLabel(need) {
     return need >= 0.4 ? "need" : need >= 0.15 ? "thin" : "solid";
@@ -277,12 +260,11 @@
     // While a rookie-only draft is pending, unrostered rookies belong to the
     // draft, not the waiver wire.
     const draft = data.draft || null;
-    const draftPending = !!draft && draft.player_type === 1 &&
-      ["pre_draft", "drafting", "paused"].includes(draft.status);
+    const draftPending = Draft.pending(draft);
     const available = [...hbById.keys()].filter((id) => !rostered.has(id)).map((id) => info[id]);
     const pool = available.filter((p) => !(draftPending && p.rookie));
     const rookiePool = draftPending ? available.filter((p) => p.rookie).sort((a, b) => a.rank - b.rank) : [];
-    const myPicks = draftPending ? ownedPicks(draft, rosters.length, me.roster.roster_id) : [];
+    const myPicks = draftPending ? Draft.ownedPicks(draft, rosters.length, me.roster.roster_id) : [];
 
     const fitScore = (p, nd) =>
       p.value * (1 + NEED_WEIGHT * Math.max(0, ...p.groups.map((g) => nd[g])));
@@ -352,20 +334,8 @@
     }
 
     // Rookie draft board: which rookies should still be there at each of my picks.
-    let rookieDraft = null;
-    if (draftPending) {
-      const picks = myPicks.map((p) => ({ ...p }));
-      const board = rookiePool.map((p, i) => ({ ...p, boardRank: i + 1, fit: fitScore(p, needs) }));
-      const taken = new Set();
-      for (const pk of picks) {
-        // Assume the room drafts roughly in ranking order, with a one-pick cushion.
-        const likely = board.filter((p) => p.boardRank >= pk.overall - 1 && !taken.has(p.id)).slice(0, 6);
-        pk.targets = likely.slice().sort((a, b) => b.fit - a.fit).slice(0, 3);
-        pk.expected = board[pk.overall - 1] || null;
-        if (pk.targets[0]) taken.add(pk.targets[0].id);
-      }
-      rookieDraft = { status: draft.status, start: draft.start_time, rounds: draft.rounds, type: draft.type, picks, board };
-    }
+    const rookieDraft = draftPending ? Draft.board(draft, myPicks, rookiePool, (p) => fitScore(p, needs)) : null;
+
 
     // Trade ideas: fair on dynasty value, fill the other team's thin position, help you.
     // Trade value: the crowdsourced keeper market, the dynasty rankings on a market-style curve, or

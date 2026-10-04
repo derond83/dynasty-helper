@@ -15,7 +15,7 @@ Waiver-wire and roster advice for Sleeper **dynasty** leagues, football and bask
 - **League tabs** across the top switch leagues. Each league has its own address (`#/<league id>/<tab>`), so links,
   bookmarks and the back button work. Inside a league: **Team** (positional balance, then your roster and the wire
   in one list), **League** (league value table and how it works), **Moves** (waiver moves), **Trades** (trade ideas),
-  **Draft** (basketball: the rookie-draft board while a rookies-only draft is pending) and **Settings**.
+  **Draft** (the rookie-draft board; shown only while a rookies-only draft is pending) and **Settings**.
 - **Settings** (per league, saved in this browser): your team, offensive values source (football), how waiver moves
   and trades are judged, trade values source (basketball), and your locked players.
 - **Leagues page** (top right, or **＋ Add league**):

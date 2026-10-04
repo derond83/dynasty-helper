@@ -137,6 +137,42 @@
   DH.settingsHtml = (sections) => sections.map((s) => `<section class="card section">
       <div class="section-head"><h2>${esc(s.title)}</h2>${s.note ? `<p>${s.note}</p>` : ""}</div>${s.body}</section>`).join("");
 
+  // ---------- Rookie draft ----------
+
+  /** Tabs to show: the Draft tab only while a rookies-only draft is pending. */
+  DH.visibleTabs = (tabs, rookieDraft) => tabs.filter((t) => t.id !== "draft" || rookieDraft);
+
+  /** If the page asks for a tab that isn't shown (e.g. Draft with no draft pending), go to the first one. */
+  DH.settleTab = function (ctx, tabs) {
+    if (tabs.some((t) => t.id === ctx.tab)) return;
+    ctx.tab = tabs[0].id;
+    ctx.store.set("tab", ctx.tab);
+    history.replaceState(null, "", `#/${ctx.id}/${ctx.tab}`);
+  };
+
+  /** The draft board: a card per pick you own. fmt: { rank(p) text, sub(p) html, basis } */
+  DH.draftHtml = function (ctx, rd, myRosterId, fmt) {
+    if (!rd) return "";
+    const date = rd.start ? new Date(rd.start).toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "date not set";
+    const note = `${rd.rounds}-round ${rd.type} rookie draft, ${date}. Rookies are kept off the waiver wire (Team tab) until it's done. Targets assume the room drafts close to ${fmt.basis}, with a one-pick cushion, and are sorted by fit for your roster.`;
+    let body;
+    if (!rd.picks.length) {
+      body = `<div class="empty">You don't own a pick in this draft. The top rookies on the board: ${rd.board.slice(0, 6).map((p) => `${esc(p.name)} (${esc(fmt.rank(p))})`).join(", ")}.</div>`;
+    } else {
+      body = `<div class="picks">${rd.picks.map((pk) => {
+        const from = String(pk.fromRoster) !== String(myRosterId) ? `<small>via ${esc(DH.teamName(ctx.data, pk.fromRoster))}</small>` : "";
+        const items = pk.targets.map((p, i) => `<li><span class="nm">${esc(p.name)}</span><span class="rank">${esc(fmt.rank(p))}</span>
+            <span class="sub">${fmt.sub(p)}${i === 0 ? ' <span class="tag fit">Top fit</span>' : ""}</span></li>`).join("");
+        return `<article class="pick">
+          <div class="num">${pk.round}.${String(pk.pick).padStart(2, "0")}${from}</div>
+          <div class="small muted">Pick ${pk.overall} overall · about ${pk.expected ? `the ${DH.fmt.ordinal(pk.overall)}-best rookie` : "end of the board"}</div>
+          <ol>${items || '<li class="muted">No ranked rookies expected to be left.</li>'}</ol>
+        </article>`;
+      }).join("")}</div>`;
+    }
+    return `<section class="section"><div class="section-head"><h2>Rookie draft</h2><p>${esc(note)}</p></div>${body}</section>`;
+  };
+
   // ---------- Trades ----------
 
   /**

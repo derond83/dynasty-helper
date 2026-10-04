@@ -44,6 +44,7 @@
   const UNAVAILABLE = new Set(["IR", "PUP", "Sus", "NA", "DNR", "COV"]);
 
   const Trades = root.TradeEngine || (typeof require === "function" ? require("../js/trades.js") : null);
+  const Draft = root.DraftBoard || (typeof require === "function" ? require("../js/draft.js") : null);
 
   const SUFFIXES = new Set(["jr", "sr", "ii", "iii", "iv", "v"]);
   function norm(s) {
@@ -389,6 +390,11 @@
       const p = describe(id);
       if (p.domain && p.value > 0) pool.push(p);
     }
+    // While a rookies-only draft is pending, unrostered rookies belong to the draft, not the wire.
+    const draft = data.draft || null;
+    const draftPending = !!Draft && Draft.pending(draft);
+    const rookiePool = draftPending ? pool.filter((p) => p.rookie) : [];
+    if (draftPending) for (let i = pool.length - 1; i >= 0; i--) if (pool[i].rookie) pool.splice(i, 1);
     for (const p of Object.values(info)) p.norm = p.domain ? p.value / scale[p.domain] : 0;
 
     // League view: lineups, how starters split across positions, positional strength.
@@ -549,6 +555,11 @@
     // Same fit score for your own players, so roster and wire sort together (within a side).
     for (const id of me.all) info[id].fit = info[id].norm * (1 + NEED_WEIGHT * needOf(info[id], myNeeds));
 
+    // Rookie draft board: offensive rookies by market value (IDP rookies have no market value to rank by).
+    const rookieDraft = draftPending ? Draft.board(draft, Draft.ownedPicks(draft, rosters.length, me.roster.roster_id),
+      rookiePool.filter((p) => p.domain === "off").sort((a, b) => b.value - a.value),
+      (p) => p.norm * (1 + NEED_WEIGHT * needOf(p, myNeeds))) : null;
+
     // Trade ideas, offense only: KeepTradeCut / Dynasty Daddy are trade markets; IDP has none.
     const offIds = (ids) => ids.filter((id) => info[id].domain === "off");
     const offLimit = (t) => Math.max(offIds(t.active).length, maxActive - cfg.idpSpots);
@@ -590,7 +601,7 @@
         faab: ((league.settings && league.settings.waiver_budget) || 0) -
           ((me.roster.settings && me.roster.settings.waiver_budget_used) || 0),
       },
-      positions, needs: myNeeds, moves, waivers, trades, standings, info, repl: idpVals.repl,
+      positions, needs: myNeeds, moves, waivers, trades, standings, info, repl: idpVals.repl, rookieDraft,
     };
   }
 

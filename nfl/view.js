@@ -9,7 +9,7 @@
   // Sleeper depth chart spots that usually mean a box player (tackles and sacks).
   const BOX = new Set(["SS", "NB", "MLB", "ILB", "LILB", "RILB", "WLB", "SLB", "LB"]);
   const TABS = [{ id: "team", label: "Team" }, { id: "league", label: "League" }, { id: "moves", label: "Moves" },
-    { id: "trades", label: "Trades" }, { id: "settings", label: "Settings", icon: "gear" }];
+    { id: "trades", label: "Trades" }, { id: "draft", label: "Draft" }, { id: "settings", label: "Settings", icon: "gear" }];
   const TRADE_KNOBS = {
     tradeMinValue: { label: "Value-only trades", min: 0.05, max: 0.4, step: 0.01, fmt: (v) => `+${Math.round(v * 100)}% or more`,
       help: "When a trade doesn't improve your starters, how much more value you must get back than you give. Surplus players (non-starters beyond your target at their position) count at half value." },
@@ -371,10 +371,16 @@
       if (ctx.tab === "league") return leagueTab();
       if (ctx.tab === "trades") return tradesTab();
       if (ctx.tab === "settings") return settingsTab();
+      if (ctx.tab === "draft") return DH.draftHtml(ctx, result.rookieDraft, result.me.rosterId, {
+        basis: `${result.source.label} value`, rank: (p) => int(p.value),
+        sub: (p) => `${posChips(p.groups)} ${esc(p.team)} · ${ageFmt(p.age)} yrs`,
+      });
       return movesHtml();
     }
     function draw() {
-      el.innerHTML = `${headHtml()}<div data-r="summary">${summaryHtml()}</div>${DH.subtabs(ctx, TABS)}<div class="stack">${tabBody()}</div>`;
+      const tabs = DH.visibleTabs(TABS, result.rookieDraft);
+      DH.settleTab(ctx, tabs);
+      el.innerHTML = `${headHtml()}<div data-r="summary">${summaryHtml()}</div>${DH.subtabs(ctx, tabs)}<div class="stack">${tabBody()}</div>`;
     }
     // A slider moved: recompute, refresh the summary and readouts, leave the sliders alone.
     function redrawAfterTuning() {

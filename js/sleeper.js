@@ -24,9 +24,9 @@
       state(sport).catch(() => fallback && fallback.state),
       get(`/players/${sport}/trending/add?lookback_hours=48&limit=100`).catch(() => (fallback && fallback.trending) || []),
     ]);
-    // Only basketball uses the draft (its rookie-draft board); skip the extra round trip for football.
+    // The league's current draft: a pending rookies-only draft gets its own Draft tab.
     let draft = null;
-    if (league.draft_id && sport === "nba") {
+    if (league.draft_id) {
       try {
         const [d, traded] = await Promise.all([get(`/draft/${league.draft_id}`), get(`/draft/${league.draft_id}/traded_picks`)]);
         draft = { ...d, rounds: d.settings && d.settings.rounds, player_type: d.settings && d.settings.player_type, traded_picks: traded };

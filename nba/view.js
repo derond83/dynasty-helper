@@ -117,35 +117,9 @@
         <div class="positions">${cards}</div></section>`;
     }
 
-    function draftHtml() {
-      const rd = result.rookieDraft;
-      if (!rd) {
-        const d = ctx.data.draft;
-        const why = !d ? "This league has no rookie draft scheduled on Sleeper yet."
-          : d.status === "complete" ? `The ${esc(d.season || "")} rookie draft is complete.`
-          : "There's no rookies-only draft pending in this league.";
-        return `<section class="section"><div class="section-head"><h2>Rookie draft</h2></div>
-          <div class="empty">${why} When a rookies-only draft is pending, this tab shows a board for each pick you own: the rookies likely to be there and which fit your roster best. Until then, rookies stay on the waiver wire on the Team tab.</div></section>`;
-      }
-      const date = rd.start ? new Date(rd.start).toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "date not set";
-      const note = `${rd.rounds}-round ${rd.type} rookie draft, ${date}. Rookies are kept off the waiver wire (Team tab) until it's done. Targets assume the room drafts close to the rankings, with a one-pick cushion, and are sorted by fit for your roster.`;
-      let body;
-      if (!rd.picks.length) {
-        body = `<div class="empty">You don't own a pick in this draft. The top rookies on the board: ${rd.board.slice(0, 6).map((p) => `${esc(p.name)} (${rankText(p)})`).join(", ")}.</div>`;
-      } else {
-        body = `<div class="picks">${rd.picks.map((pk) => {
-          const from = String(pk.fromRoster) !== String(result.me.rosterId) ? `<small>via ${esc(DH.teamName(ctx.data, pk.fromRoster))}</small>` : "";
-          const items = pk.targets.map((p, i) => `<li><span class="nm">${esc(p.name)}</span><span class="rank">${rankText(p)}</span>
-              <span class="sub">${posChips(p.groups)} ${esc(p.team)} · ${ageFmt(p.age)} yrs${i === 0 ? ' <span class="tag fit">Top fit</span>' : ""}</span></li>`).join("");
-          return `<article class="pick">
-            <div class="num">${pk.round}.${String(pk.pick).padStart(2, "0")}${from}</div>
-            <div class="small muted">Pick ${pk.overall} overall · about ${pk.expected ? `the ${ordinal(pk.overall)}-best rookie` : "end of the board"}</div>
-            <ol>${items || '<li class="muted">No ranked rookies expected to be left.</li>'}</ol>
-          </article>`;
-        }).join("")}</div>`;
-      }
-      return `<section class="section"><div class="section-head"><h2>Rookie draft</h2><p>${esc(note)}</p></div>${body}</section>`;
-    }
+    const draftHtml = () => DH.draftHtml(ctx, result.rookieDraft, result.me.rosterId, {
+      basis: "the rankings", rank: rankText, sub: (p) => `${posChips(p.groups)} ${esc(p.team)} · ${ageFmt(p.age)} yrs`,
+    });
 
     function movesHtml() {
       const moves = result.moves;
@@ -315,7 +289,9 @@
 
     const tabBody = () => (ctx.tab === "team" ? `${positionsHtml()}${playersTab()}` : ctx.tab === "trades" ? tradesTab()
       : ctx.tab === "league" ? leagueTab() : ctx.tab === "settings" ? settingsTab() : ctx.tab === "draft" ? draftHtml() : movesHtml());
-    el.innerHTML = `${headHtml()}<div data-r="summary">${summaryHtml()}</div>${DH.subtabs(ctx, TABS)}<div class="stack">${tabBody()}</div>`;
+    const tabs = DH.visibleTabs(TABS, result.rookieDraft);
+    DH.settleTab(ctx, tabs);
+    el.innerHTML = `${headHtml()}<div data-r="summary">${summaryHtml()}</div>${DH.subtabs(ctx, tabs)}<div class="stack">${tabBody()}</div>`;
     // A slider moved: recompute, refresh the summary and readouts, leave the sliders alone.
     function redrawAfterTuning() {
       analyze();

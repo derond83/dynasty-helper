@@ -11,6 +11,7 @@ load("data/home.js");
 load("data/nfl/players.js"); load("data/nfl/values.js"); load("data/nfl/idp.js");
 load("data/nba/players.js"); load("data/nba/rankings.js"); load("data/nba/keeper.js");
 const NFL = load("nfl/analysis.js");
+const Draft = load("js/draft.js");
 const NBA = load("nba/analysis.js");
 
 let failures = 0;
@@ -68,6 +69,17 @@ for (const home of window.HOME_LEAGUES) {
           if (c.after > c.before && c.before >= c.target) assert(t.myChanges.some(([g, d]) => g === c.group && d > 0), `${c.group} added without starting`);
         }
       }
+    });
+    test(`nfl ${home.name}: rookie draft board only while a rookies-only draft is pending`, () => {
+      const r = rosters[0];
+      const now = NFL.analyze(data, window.DYNASTY_VALUES, window.IDP_DATA, r.roster_id, { trades: false });
+      assert.strictEqual(now.rookieDraft == null, !Draft.pending(snap.draft), "board matches the league's draft state");
+      const draft = { status: "pre_draft", player_type: 1, rounds: 3, type: "linear", season: snap.league.season, traded_picks: [],
+        slot_to_roster_id: Object.fromEntries(rosters.map((x, i) => [i + 1, x.roster_id])) };
+      const res = NFL.analyze({ ...data, draft }, window.DYNASTY_VALUES, window.IDP_DATA, r.roster_id, { trades: false });
+      assert(res.rookieDraft && res.rookieDraft.picks.length === 3, "one pick per round");
+      assert(res.rookieDraft.board.every((p) => p.rookie && p.domain === "off"), "board is offensive rookies");
+      assert(!res.waivers.some((w) => w.rookie), "rookies are off the wire during the draft");
     });
     test(`nfl ${home.name}: locked players are never offered in a trade`, () => {
       const r = rosters[0];
