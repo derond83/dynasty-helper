@@ -54,12 +54,16 @@
   };
 
   // ---------- Scripts ----------
+  // The deploy stamps the commit into index.html; adding it to every file the app loads means a new
+  // deploy gets new addresses, so browsers can't keep serving an older copy of one file.
+  const meta = typeof document !== "undefined" && document.querySelector('meta[name="app-version"]');
+  DH.version = meta && !/^__/.test(meta.content) ? meta.content : "dev";
   const loaded = new Map();
   DH.loadScript = function (src) {
     if (!loaded.has(src)) {
       loaded.set(src, new Promise((resolve, reject) => {
         const s = document.createElement("script");
-        s.src = src;
+        s.src = DH.version === "dev" ? src : `${src}?v=${DH.version}`;
         s.onload = () => resolve();
         s.onerror = () => { loaded.delete(src); reject(new Error(`Couldn't load ${src}`)); };
         document.head.appendChild(s);

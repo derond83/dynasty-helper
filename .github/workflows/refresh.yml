@@ -60,6 +60,11 @@ jobs:
       - name: Smoke tests
         run: node tests/smoke.js
 
+      # Each deploy gets fresh file addresses (styles.css?v=<commit>), so browsers can't mix in
+      # cached copies from an older version. Only the uploaded site is stamped, not the repo.
+      - name: Stamp version
+        run: sed -i "s/__VERSION__/$(git rev-parse --short HEAD)/g" index.html
+
       - uses: actions/configure-pages@v6
 
       - uses: actions/upload-pages-artifact@v5

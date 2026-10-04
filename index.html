@@ -2,11 +2,13 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<!-- __VERSION__ is replaced with the commit at deploy time, so each deploy gets fresh file addresses past browser caches. -->
+<meta name="app-version" content="__VERSION__">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Dynasty Helper</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&display=swap">
-<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="styles.css?v=__VERSION__">
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -20,12 +22,12 @@
 <main id="main" class="wrap" tabindex="-1"></main>
 <noscript><p class="wrap">Dynasty Helper needs JavaScript.</p></noscript>
 
-<script src="js/common.js"></script>
-<script src="js/sleeper.js"></script>
-<script src="js/trades.js"></script>
-<script src="data/home.js"></script>
-<script src="nfl/view.js"></script>
-<script src="nba/view.js"></script>
-<script src="js/app.js"></script>
+<script src="js/common.js?v=__VERSION__"></script>
+<script src="js/sleeper.js?v=__VERSION__"></script>
+<script src="js/trades.js?v=__VERSION__"></script>
+<script src="data/home.js?v=__VERSION__"></script>
+<script src="nfl/view.js?v=__VERSION__"></script>
+<script src="nba/view.js?v=__VERSION__"></script>
+<script src="js/app.js?v=__VERSION__"></script>
 </body>
 </html>

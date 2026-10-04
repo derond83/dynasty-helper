@@ -251,6 +251,7 @@
         <ul class="lrows">${list.map((l) => row({ ...l, meta: `${DH.sports[l.sport].label} · ${l.season} · ${l.builtin ? "built in" : "added in this browser"}` },
           `<a class="more" href="#/${esc(l.id)}">Open</a>${l.builtin ? "" : `<button type="button" class="more" data-remove="${esc(l.id)}" aria-label="Remove ${esc(l.name)}">Remove</button>`}`)).join("")}</ul>
       </section>
+      <p class="muted small">App version ${esc(DH.version)}. After a new version is deployed, it can take up to 10 minutes to show up; a hard refresh (Ctrl+Shift+R, or Cmd+Shift+R on a Mac) loads it right away.</p>
     </div>`;
   }
 
