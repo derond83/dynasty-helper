@@ -372,8 +372,52 @@
   // Small inline icons (stroke follows the text color, so they suit light and dark themes).
   const ICONS = {
     gear: '<svg class="icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
+    info: '<svg class="icon" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>',
   };
   DH.icon = (name) => ICONS[name] || "";
+
+  // Section explanations live behind an info icon next to the heading: hover or focus shows them,
+  // a tap toggles them (touch screens). Any ".section-head > p" rendered anywhere is converted.
+  let tipSeq = 0;
+  function tuckInfo(scope) {
+    for (const p of scope.querySelectorAll(".section-head > p")) {
+      const head = p.parentElement, h = head.querySelector("h2");
+      if (!h) continue;
+      const id = `tip-${++tipSeq}`;
+      const tip = document.createElement("div");
+      tip.className = "info-tip"; tip.id = id; tip.setAttribute("role", "tooltip");
+      tip.append(...p.childNodes);
+      p.replaceWith(tip);
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "info"; b.setAttribute("aria-label", "About this section");
+      b.setAttribute("aria-describedby", id); b.setAttribute("aria-expanded", "false");
+      b.innerHTML = DH.icon("info");
+      h.append(b);
+    }
+  }
+  if (typeof document !== "undefined") {
+    const start = () => {
+      const main = document.getElementById("main");
+      if (!main) return;
+      tuckInfo(main);
+      new MutationObserver(() => tuckInfo(main)).observe(main, { childList: true, subtree: true });
+    };
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start); else start();
+    const closeAll = (except) => {
+      for (const h of document.querySelectorAll(".section-head.tip-open")) if (h !== except) {
+        h.classList.remove("tip-open"); h.querySelector("button.info")?.setAttribute("aria-expanded", "false");
+      }
+    };
+    document.addEventListener("click", (e) => {
+      const b = e.target.closest && e.target.closest("button.info");
+      if (!b) { if (!e.target.closest || !e.target.closest(".info-tip")) closeAll(null); return; }
+      const head = b.closest(".section-head");
+      closeAll(head);
+      const open = head.classList.toggle("tip-open");
+      b.setAttribute("aria-expanded", String(open));
+    });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeAll(null); });
+  }
 
   DH.subtabs = (ctx, tabs) => `<nav class="subtabs" aria-label="Sections">${tabs.map((t) =>
     `<a href="#/${esc(ctx.id)}/${t.id}"${t.id === ctx.tab ? ' aria-current="page"' : ""}${t.icon ? ` class="has-icon tab-${t.id}"` : ""}>${t.icon ? DH.icon(t.icon) : ""}<span>${esc(t.label)}</span>${t.badge ? ` <span class="count">${esc(t.badge)}</span>` : ""}</a>`).join("")}</nav>`;
