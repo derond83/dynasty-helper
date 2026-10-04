@@ -113,10 +113,10 @@
       <div class="whoami">
         <span class="eyebrow">Your team</span>
         <span class="team-name">${esc(team)}${owner && owner !== team ? ` <span class="muted">· ${esc(owner)}</span>` : ""}</span>
-        <a class="small settings-link" href="#/${esc(ctx.id)}/settings">${DH.icon("gear")}<span>Change in Settings</span></a>
+        <a class="settings-link" href="#/${esc(ctx.id)}/settings"${ctx.tab === "settings" ? ' aria-current="page"' : ""}>${DH.icon("gear")}<span>Settings</span></a>
       </div>
     </header>
-    ${ctx.teamGuessed ? `<div class="banner"><span><strong>Pick your team.</strong> Suggestions are showing for ${esc(team)}. Choose yours on the <a href="#/${esc(ctx.id)}/settings">Settings</a> tab, or add your Sleeper username on the <a href="#/leagues">Leagues</a> page so every league opens on your team.</span></div>` : ""}`;
+    ${ctx.teamGuessed ? `<div class="banner"><span><strong>Pick your team.</strong> Suggestions are showing for ${esc(team)}. Choose yours in <a href="#/${esc(ctx.id)}/settings">Settings</a>, or add your Sleeper username on the <a href="#/leagues">Leagues</a> page so every league opens on your team.</span></div>` : ""}`;
   };
 
   // ---------- Settings tab pieces ----------
@@ -419,7 +419,8 @@
     document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeAll(null); });
   }
 
-  DH.subtabs = (ctx, tabs) => `<nav class="subtabs" aria-label="Sections">${tabs.map((t) =>
+  // Settings is reached from the link under your team name, so it isn't repeated in the tab bar.
+  DH.subtabs = (ctx, tabs) => `<nav class="subtabs" aria-label="Sections">${tabs.filter((t) => t.id !== "settings").map((t) =>
     `<a href="#/${esc(ctx.id)}/${t.id}"${t.id === ctx.tab ? ' aria-current="page"' : ""}${t.icon ? ` class="has-icon tab-${t.id}"` : ""}>${t.icon ? DH.icon(t.icon) : ""}<span>${esc(t.label)}</span>${t.badge ? ` <span class="count">${esc(t.badge)}</span>` : ""}</a>`).join("")}</nav>`;
 
   DH.lockBtn = function (locked, p) {

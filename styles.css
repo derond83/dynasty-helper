@@ -312,8 +312,13 @@ a.more { text-decoration: none; color: var(--ink); display: inline-flex; align-i
 .subtabs a.tab-settings:hover .icon, .subtabs a.tab-settings[aria-current] .icon { transform: rotate(45deg); }
 @media (prefers-reduced-motion: reduce) { .subtabs a.tab-settings .icon { transition: none; } }
 .settings-link { display: inline-flex; align-items: center; gap: 4px; justify-self: end; }
-.settings-link .icon { width: 14px; height: 14px; }
-@media (max-width: 640px) { .settings-link { justify-self: start; } }
+.settings-link .icon { width: 18px; height: 18px; vertical-align: 0; transition: transform .3s ease; }
+.settings-link { font-weight: 600; text-decoration: none; padding: 6px 10px; margin-top: 2px; border-radius: var(--r); }
+.settings-link:hover { background: var(--line); }
+.settings-link:hover .icon, .settings-link[aria-current] .icon { transform: rotate(45deg); }
+.settings-link[aria-current] { background: var(--ink); color: var(--bg); }
+@media (prefers-reduced-motion: reduce) { .settings-link .icon { transition: none; } }
+@media (max-width: 640px) { .settings-link { justify-self: start; margin-left: -10px; } }
 
 /* Matchup */
 .scoreboard .sb-row { display: grid; grid-template-columns: 1fr minmax(140px, 220px) 1fr; gap: 16px; align-items: end; }
