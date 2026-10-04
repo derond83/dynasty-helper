@@ -11,6 +11,8 @@
   const TABS = [{ id: "moves", label: "Moves" }, { id: "trades", label: "Trades" }, { id: "players", label: "Players" },
     { id: "league", label: "League" }, { id: "settings", label: "Settings", icon: "gear" }];
   const TRADE_KNOBS = {
+    tradeMinValue: { label: "Value-only trades", min: 0.05, max: 0.4, step: 0.01, fmt: (v) => `+${Math.round(v * 100)}% or more`,
+      help: "When a trade doesn't improve your starters, how much more value you must get back than you give. Surplus players (non-starters beyond your target at their position) count at half value." },
     tradeTolerance: { label: "Trade fairness", min: 0.03, max: 0.25, step: 0.01, fmt: (v) => `within ${Math.round(v * 100)}%`,
       help: "How far apart the two sides' market value may be. Lower is stricter (fewer, fairer ideas); higher allows bigger asks." },
   };
@@ -175,8 +177,8 @@
       const tol = Math.round(Number(opts().tradeTolerance) * 100);
       return `<section class="section">
         <div class="section-head"><h2>Trade ideas</h2>
-          <p>Each idea is fair on ${esc(result.source.label)} value (within ${tol}%, with a premium for the best player in a 2-for-1, as trade calculators apply), fills a position where the other team is thin, and gives you something concrete: better starters or more value. Offense only. Locked, taxi and injured players are left out. <a href="#/${esc(ctx.id)}/settings">Adjust in Settings</a>.</p></div>
-        <div class="trades">${cards || `<div class="empty">No trade fits all three tests right now. Your starters may already beat what a fair deal returns, or no team needs what you can spare. Loosen trade fairness in <a href="#/${esc(ctx.id)}/settings">Settings</a> to see more.</div>`}</div>
+          <p>Each idea is fair on ${esc(result.source.label)} value (within ${tol}%, with a premium for the best player in a 2-for-1, as trade calculators apply), fills a position where the other team is thin, gives you something concrete (better starters and first backups, or clearly more value), and keeps your roster in shape: it won't thin a position where you're at or below your target or pile onto one you've already filled. Non-starters beyond your target count at half value to you. Offense only. Locked, taxi and injured players are left out. <a href="#/${esc(ctx.id)}/settings">Adjust in Settings</a>.</p></div>
+        <div class="trades">${cards || `<div class="empty">No trade passes every test right now. Your starters may already beat what a fair deal returns, your spare players may be at positions no team needs, or every fair deal would thin a position you're short at. Loosen trade fairness in <a href="#/${esc(ctx.id)}/settings">Settings</a> to see more.</div>`}</div>
       </section>`;
     }
 

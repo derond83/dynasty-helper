@@ -116,7 +116,12 @@ offered). A trade is suggested only if all of these hold:
    an uneven deal carries a premium (values are compared raised to the power 1.35), as trade calculators do. A player a
    side would have to release to make room counts against that side.
 2. **It fills their need**: their starters improve, at a position where they're thin.
-3. **It gives you something concrete**: your starters improve, or you gain value (at least 3%).
+3. **It gives you something concrete**: your starters improve (your first backup at each position counts at 35%), or
+   you gain clearly more value (10% by default, the "Value-only trades" setting, and at least 400).
+4. **It keeps your roster in shape**: it won't leave a position below the depth you aim for by thinning it further,
+   or add to a position you've already filled unless the newcomer would start. A non-starter beyond your target at
+   his position counts at half value to you, so a fourth QB in a one-QB league isn't a "value win", and trading
+   surplus away costs you less. Each card shows how your position counts change.
 
 Ideas are ranked by your gain, nudged toward deals the other team will like more; at most two per partner, and the
 same player of yours appears in at most two.

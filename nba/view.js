@@ -21,6 +21,8 @@
     rankings: "Trade value follows the curated dynasty rank on a market-style curve (#1 = 10,000, #8 ≈ 8,560, #24 ≈ 6,000, #50 ≈ 3,370, #100 ≈ 1,100).",
   };
   const TRADE_KNOBS = {
+    tradeMinValue: { label: "Value-only trades", min: 0.05, max: 0.4, step: 0.01, fmt: (v) => `+${Math.round(v * 100)}% or more`,
+      help: "When a trade doesn't improve your starters, how much more value you must get back than you give. Surplus players (non-starters beyond your target at their position) count at half value." },
     tradeTolerance: { label: "Trade fairness", min: 0.03, max: 0.25, step: 0.01, fmt: (v) => `within ${Math.round(v * 100)}%`,
       help: "How far apart the two sides' trade value may be. Lower is stricter (fewer, fairer ideas); higher allows bigger asks." },
   };
@@ -280,8 +282,8 @@
       const tol = Math.round(Number(opts().tradeTolerance) * 100);
       return `<section class="section">
         <div class="section-head"><h2>Trade ideas</h2>
-          <p>Each idea is fair on trade value (within ${tol}%, with a premium for the best player in a 2-for-1), fills a position where the other team is thin, and gives you something concrete: better starters or more value. ${esc(TRADE_MODE_NOTE[result.tradeMode])} Locked and injured players are left out. <a href="#/${esc(ctx.id)}/settings">Adjust in Settings</a>.</p></div>
-        <div class="trades">${cards || `<div class="empty">No trade fits all three tests right now. Loosen trade fairness in <a href="#/${esc(ctx.id)}/settings">Settings</a> to see more.</div>`}</div>
+          <p>Each idea is fair on trade value (within ${tol}%, with a premium for the best player in a 2-for-1), fills a position where the other team is thin, gives you something concrete (better starters and first backups, or clearly more value), and keeps your roster in shape: it won't thin a position where you're at or below your target or pile onto one you've already filled. Non-starters beyond your target count at half value to you. ${esc(TRADE_MODE_NOTE[result.tradeMode])} Locked and injured players are left out. <a href="#/${esc(ctx.id)}/settings">Adjust in Settings</a>.</p></div>
+        <div class="trades">${cards || `<div class="empty">No trade passes every test right now. Loosen trade fairness in <a href="#/${esc(ctx.id)}/settings">Settings</a> to see more.</div>`}</div>
       </section>`;
     }
 

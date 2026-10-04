@@ -161,6 +161,10 @@
       const pctOff = Math.round(Math.abs(1 - t.fairness) * 100);
       const uneven = t.give.length !== t.get.length;
       why.push(`<span>${pctOff <= 2 ? "Even on value" : `Fair: ${pctOff}% apart`}${uneven ? ", counting the 2-for-1 premium" : ""} · their starters ${signed(t.theirGain)}</span>`);
+      // Your position counts that change, against the depth you aim to carry.
+      if (t.shape && t.shape.length) {
+        why.push(`<span>Your roster: ${t.shape.map((c) => `${esc(fmt.group(c.group))} ${c.before} → ${c.after} <span class="muted">(aim ${c.target})</span>`).join(", ")}</span>`);
+      }
       const drops = [];
       if (t.myDrop.length) drops.push(`You'd release ${t.myDrop.map((id) => esc(info[id].name)).join(", ")} to make room.`);
       if (t.theirDrop.length) drops.push(`They'd release ${t.theirDrop.map((id) => esc(info[id].name)).join(", ")} to make room.`);

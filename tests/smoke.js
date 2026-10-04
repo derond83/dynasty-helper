@@ -31,6 +31,9 @@ function checkTrades(res, rosters, myId, tol, eligible) {
     assert(t.fairness >= (1 - tol) * 0.95 && t.fairness <= 1 / ((1 - tol) * 0.95), `fair within tolerance (got ${t.fairness.toFixed(3)})`);
     assert(t.fills.length > 0 && t.theirGain > 0, "fills a need for them");
     assert(t.myGain > 0 || t.myValue > 0, "gives you something concrete");
+    for (const c of t.shape || []) {
+      assert(!(c.after < c.before && c.after < c.target), `doesn't thin ${c.group} below target (${c.before} → ${c.after}, aim ${c.target})`);
+    }
   }
 }
 
@@ -56,6 +59,14 @@ for (const home of window.HOME_LEAGUES) {
       for (const r of rosters) {
         const res = NFL.analyze(data, window.DYNASTY_VALUES, window.IDP_DATA, r.roster_id, { locked: [] });
         checkTrades(res, rosters, r.roster_id, NFL.DEFAULTS.tradeTolerance, (id) => res.info[id].domain === "off");
+      }
+    });
+    test(`nfl ${home.name}: no trade adds a non-starting QB to a full QB room`, () => {
+      for (const r of rosters) {
+        const res = NFL.analyze(data, window.DYNASTY_VALUES, window.IDP_DATA, r.roster_id, {});
+        for (const t of res.trades) for (const c of t.shape) {
+          if (c.after > c.before && c.before >= c.target) assert(t.myChanges.some(([g, d]) => g === c.group && d > 0), `${c.group} added without starting`);
+        }
       }
     });
     test(`nfl ${home.name}: locked players are never offered in a trade`, () => {

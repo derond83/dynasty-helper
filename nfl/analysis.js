@@ -25,6 +25,7 @@
     multiBonus: 0.05,   // boost for DL/LB or LB/DB eligibility
     minGain: 0.12,      // a swap must add this share of value
     tradeTolerance: 0.10, // trades: the most market value either side may give up
+    tradeMinValue: 0.10,  // trades: a value-only trade must gain you at least this share of what you give
   };
 
   // Slots nothing here values; reported, and left out of lineups.
@@ -562,7 +563,9 @@
       groupsOf: (id) => info[id].groups,
       tradeable: (id) => info[id].value > 0 && !UNAVAILABLE.has(info[id].injury),
       offerable: (id) => !locked.has(id),
-      options: { tolerance: cfg.tradeTolerance, minValueGain: MIN_ABS_GAIN.off },
+      targets: Object.fromEntries(OFFENSE.map((g) => [g, target(g)])),
+      starters: Object.fromEntries(OFFENSE.map((g) => [g, startersPer[g]])),
+      options: { tolerance: Number(cfg.tradeTolerance), minValueShare: Number(cfg.tradeMinValue), minValueGain: 400 },
     }) : [];
     const groupRank = (id, g) => leagueG[g].sorted.filter((v) => v > strength(teams.find((t) => t.roster.roster_id === id).active, g) + 1e-9).length + 1;
     for (const t of trades) t.theirRanks = Object.fromEntries(t.fills.map((g) => [g, groupRank(t.partner, g)]));

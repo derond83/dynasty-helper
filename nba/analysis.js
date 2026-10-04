@@ -17,6 +17,7 @@
     minGain: 0.12,        // a swap must add this share of dynasty value (about 12 ranking spots at 100–250)
     tradeTolerance: 0.10, // trades: the most dynasty value either side may give up
     tradeValues: "blend", // trades are judged on: "blend", "keeper" (crowdsourced market) or "rankings"
+    tradeMinValue: 0.10,  // trades: a value-only trade must gain you at least this share of what you give
   };
   // Trades judge players on a steeper curve than waivers: the market pays far more for the very top.
   // #1 = 10,000, #8 ≈ 8,560, #24 ≈ 6,000, #50 ≈ 3,370, #100 ≈ 1,100 (about KeepTradeCut's shape).
@@ -395,7 +396,9 @@
       groupsOf: (id) => info[id].groups,
       tradeable: (id) => info[id].tradeValue > 0 && !UNAVAILABLE.has(info[id].injury),
       offerable: (id) => !locked.has(String(id)),
-      options: { tolerance: Number(cfg.tradeTolerance), minValueGain: 150 },
+      targets: Object.fromEntries(GROUPS.map((g) => [g, starters[g] * 2])),
+      starters,
+      options: { tolerance: Number(cfg.tradeTolerance), minValueShare: Number(cfg.tradeMinValue), minValueGain: 400 },
     }) : [];
     for (const t of trades) {
       const team = teams.find((x) => x.roster.roster_id === t.partner);

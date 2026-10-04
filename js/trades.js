@@ -5,7 +5,12 @@
 //   - fair on market value: neither side gives up more than `tolerance` of what it gets back, with a
 //     premium for the best player in an uneven (2-for-1) deal, as trade calculators like KTC apply;
 //   - it fills a need for the other team: their starters improve, at a position where they're thin;
-//   - it gives you something concrete: your starters improve, or you gain market value.
+//   - it gives you something concrete: your starters (and first backups) improve, or you gain a clear
+//     amount of market value;
+//   - it keeps your roster in shape: it doesn't thin a position where you're already at or below
+//     target, or pile onto one where you're already full (unless the newcomer would start).
+// A non-starter at a position where you'd be over target counts at a discount, so a fourth QB in a
+// one-QB league isn't "worth" his full market value to you, and trading surplus away costs you less.
 // Suggestions are ranked by your gain, with a nudge toward deals the other side will like more.
 (function (root) {
   "use strict";
@@ -15,6 +20,9 @@
     premium: 1.35,   // >1 makes one great player worth more than two good ones adding up to the same
     valueWeight: 0.5, // how much market value counts next to starter strength in each side's gain
     minValueGain: 0, // smallest market-value gain that counts as a benefit on its own (sport's units)
+    minValueShare: 0.10, // ...and as a share of what you give, when your starters don't improve
+    surplus: 0.5,    // what a non-starter beyond your target at his position is worth to you
+    depthWeight: 0.35, // weight of your first backup at each position, next to your starters
     appeal: 0.2,     // weight of the other side's gain when ranking
     perPartner: 2,   // suggestions per trade partner
     perPlayer: 2,    // suggestions that offer the same player of yours
@@ -33,6 +41,8 @@
    *   groupsOf(id)       positions a player counts at
    *   tradeable(id)      can this player be in a trade at all
    *   offerable(id)      can you offer this player (not locked)
+   *   targets            { group: players }       how many you aim to carry at each position
+   *   starters           { group: count }         starters per team at each position (may be fractional)
    */
   function suggest(o) {
     const cfg = { ...DEFAULTS, ...(o.options || {}) };
@@ -55,7 +65,36 @@
       return { ids: out, dropped };
     }
 
-    const myBase = o.strength(o.me.active), myGroups = o.groupStrength(o.me.active);
+    // ---------- Your side: roster shape, depth, surplus ----------
+    const groups = Object.keys(o.targets || {});
+    const depth = (ids, g) => ids.filter((id) => o.groupsOf(id).includes(g)).length;
+    // Your first backup at each position, counted at a reduced weight next to your starters.
+    const backups = (ids) => groups.reduce((s, g) => {
+      const vals = ids.filter((id) => o.groupsOf(id).includes(g)).map(o.value).sort((a, b) => b - a);
+      return s + (vals[Math.ceil((o.starters || {})[g] || 0)] || 0);
+    }, 0);
+    const myStrength = (ids) => o.strength(ids) + cfg.depthWeight * backups(ids);
+    const starts = (ids, id) => o.strength(ids) - o.strength(ids.filter((x) => x !== id)) > 1e-9;
+    // What a player is worth to you on a given roster: full value, or a discount if he's surplus there.
+    const worth = (id, ids) => {
+      const extra = !starts(ids, id) && o.groupsOf(id).length > 0 &&
+        o.groupsOf(id).every((g) => depth(ids, g) > (o.targets[g] ?? Infinity));
+      return o.value(id) * (extra ? cfg.surplus : 1);
+    };
+    // Position counts that change, and whether the change hurts your roster's shape.
+    function shape(before, after, gainAt) {
+      const changes = [];
+      for (const g of groups) {
+        const b = depth(before, g), a = depth(after, g), t = o.targets[g];
+        if (a === b) continue;
+        if (a < b && a < t) return { bad: `leaves you thin at ${g}` };
+        if (a > b && b >= t && !(gainAt[g] > 1e-9)) return { bad: `piles onto ${g}` };
+        changes.push({ group: g, before: b, after: a, target: t });
+      }
+      return { changes };
+    }
+
+    const myBase = myStrength(o.me.active), myGroups = o.groupStrength(o.me.active);
     const myGive = pool(o.me.active, o.offerable);
     const found = [];
 
@@ -87,16 +126,25 @@
         const fills = [...new Set(give.flatMap(o.groupsOf))].filter((g) => (theirNeeds[g] || 0) >= 0.15);
         if (!fills.length) continue;
 
-        const myGain = o.strength(mine.ids) - myBase;
-        const myValue = raw(get) - raw(give) - raw(mine.dropped);
+        // Your roster must stay in shape.
+        const afterMine = o.groupStrength(mine.ids);
+        const gainAt = Object.fromEntries(Object.keys(afterMine).map((g) => [g, afterMine[g] - (myGroups[g] || 0)]));
+        const myShape = shape(o.me.active, mine.ids, gainAt);
+        if (myShape.bad) continue;
+
+        const myGain = myStrength(mine.ids) - myBase;
+        // Value to you: what you get on your new roster minus what you give (and release) on your current one.
+        const myValue = get.reduce((s, id) => s + worth(id, mine.ids), 0) -
+          give.concat(mine.dropped).reduce((s, id) => s + worth(id, o.me.active), 0);
         const theirValue = raw(give) - raw(get) - raw(theirs.dropped);
-        const valueWin = myValue >= Math.max(cfg.minValueGain, 0.03 * raw(give));
-        if (myGain <= 0 && !valueWin) continue;
+        // With no starter gain, the value gain has to be clear, not day-to-day noise.
+        const valueWin = myValue >= Math.max(cfg.minValueGain, cfg.minValueShare * raw(give));
+        if (myGain <= 1e-9 && !valueWin) continue;
         const myScore = myGain + cfg.valueWeight * myValue;
         if (myScore <= 0) continue;
         const theirScore = theirGain + cfg.valueWeight * theirValue;
 
-        const afterMine = o.groupStrength(mine.ids), afterTheirs = o.groupStrength(theirs.ids);
+        const afterTheirs = o.groupStrength(theirs.ids);
         const diff = (a, b) => Object.keys(a).map((g) => [g, a[g] - (b[g] || 0)]).filter(([, d]) => Math.abs(d) > 1e-9);
         found.push({
           partner: partner.id, give, get,
@@ -105,6 +153,7 @@
           fills,
           myChanges: diff(afterMine, myGroups), theirChanges: diff(afterTheirs, theirGroups),
           myDrop: mine.dropped, theirDrop: theirs.dropped,
+          shape: myShape.changes, // [{ group, before, after, target }] for positions whose count changes
         });
       }
     }
