@@ -146,6 +146,9 @@ Questionable 85%; football players on bye count 0. A basketball player's week is
 - **Opponent**: this week's opponent from Sleeper's matchups, their best lineup, and their current Sleeper lineup.
 - **Win chance**: the difference in best-lineup totals against the combined spread of both lineups (each player's
   weekly spread grows with his projection), assuming both teams start their best.
+- **Bench**: every active player outside your best lineup, by projection, with his opponent (football) or game count
+  (basketball), injury or bye status, the slots he can fill, and how far he is behind the weakest starter he could
+  replace. The opponent's bench is listed the same way, collapsed underneath.
 - **What decides it**: slots where you're ahead or behind, problems in the opponent's set lineup, your questionable
   starters, and toss-ups between a starter and a bench player.
 

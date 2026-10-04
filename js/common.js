@@ -287,13 +287,39 @@
       return alt && pts(id) - pts(alt) < 1 ? `${esc(pname(id))} over ${esc(pname(alt))} at ${esc(slots[i])} is a toss-up (${f1(pts(id))} vs ${f1(pts(alt))})` : null;
     }).filter(Boolean);
     if (tossups.length) notes.push(`${tossups.slice(0, 3).join("; ")}.`);
-    const bench = benchIds.filter((id) => pts(id) > 0).sort((x, y) => pts(y) - pts(x)).slice(0, 6);
+    // Bench tables: every active non-starter, with where he could start and how far he is from it.
+    const benchTable = (ids, lineup, mine) => {
+      if (!ids.length) return '<p class="muted small">No one on the bench.</p>';
+      const rows = ids.slice().sort((x, y) => pts(y) - pts(x)).map((id) => {
+        const p = pts(id), pr = proj.players[id];
+        const open = slots.map((slot, i) => ({ slot, i })).filter(({ slot }) => sp.fits(id, slot));
+        // The starter he'd most easily replace: the eligible slot whose starter projects lowest.
+        const best = open.map(({ slot, i }) => ({ slot, starter: lineup[i], gap: (lineup[i] ? pts(lineup[i]) : 0) - p }))
+          .sort((x, y) => x.gap - y.gap)[0];
+        const status = injury(id) ? `<span class="tag inj">${esc(injury(id))}</span>`
+          : !pr ? `<span class="tag warn">${sp.sport === "nfl" ? "Bye" : "No games"}</span>` : "";
+        const opp = pr ? (sp.sport === "nba" ? `${pr.g} game${pr.g === 1 ? "" : "s"}` : (pr.opp || []).map((o) => `vs ${esc(o)}`).join(", ")) : "–";
+        const where = !open.length ? '<span class="muted">No slot</span>'
+          : `${[...new Set(open.map((o) => o.slot))].map(esc).join(", ")}`;
+        const gap = !best ? "–" : best.gap <= 0.05 ? `<span class="tag fit">Ahead of ${esc(pname(best.starter))}</span>`
+          : `${f1(best.gap)} behind ${esc(best.starter ? pname(best.starter) : "an empty slot")} <span class="muted">(${esc(best.slot)})</span>`;
+        return `<tr><td><span class="pname"><strong>${esc(pname(id))}</strong> ${sp.chips(sp.groupsOf(id))}</span></td>
+          <td class="small">${opp}</td><td>${status}</td><td class="num"><span class="val">${f1(p)}</span></td>
+          <td class="small">${where}</td><td class="small">${gap}</td></tr>`;
+      }).join("");
+      return `<div class="table-wrap"><table><thead><tr><th>Player</th><th>${sp.sport === "nfl" ? "Opponent" : "Games"}</th><th>Status</th>
+        <th class="num">Proj</th><th>Can start at</th><th>${mine ? "Vs your starter" : "Vs their starter"}</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+    };
+    const theirBenchIds = oppRoster ? active(oppRoster).filter((id) => !res.them.best.includes(id)) : [];
 
     return `${board}
       <section class="section"><div class="section-head"><h2>Lineup changes</h2><p>Compared with the lineup you have set in Sleeper for week ${week}.</p></div>${changes}</section>
       <section class="section"><div class="section-head"><h2>Slot by slot</h2><p>Your best lineup against ${oppName ? `${esc(oppName)}'s best` : "no opponent"}. Out, IR and suspended players count 0; players without a game ${sp.sport === "nfl" ? "(byes)" : ""} count 0.</p></div>${table}</section>
       ${notes.length ? `<section class="section"><div class="section-head"><h2>What decides it</h2></div><ul class="notes">${notes.map((n) => `<li>${n}</li>`).join("")}</ul></section>` : ""}
-      ${bench.length ? `<section class="section"><div class="section-head"><h2>Best on your bench</h2></div><p class="small">${bench.map((id) => `${esc(pname(id))} <span class="muted">${f1(pts(id))}</span>`).join(" · ")}</p></section>` : ""}
+      <section class="section"><div class="section-head"><h2>Your bench</h2>
+        <p>Everyone not in your best lineup, by projection, with the slots he can fill and how far he is from the weakest starter there. IR and taxi players aren't listed.</p></div>
+        ${benchTable(benchIds, res.me.best, true)}</section>
+      ${oppRoster ? `<details class="srcs card"><summary><strong>${esc(oppName)}'s bench</strong> <span class="muted">(${theirBenchIds.length})</span></summary>${benchTable(theirBenchIds, res.them.best, false)}</details>` : ""}
       <p class="small muted">Projections: Sleeper, week ${week}, refreshed ${esc(new Date(proj.updated).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }))} (twice a day). Win chance assumes both teams start their best lineup.</p>`;
   };
 
