@@ -1,7 +1,7 @@
 # Front Office
 
 Front Office gives waiver, trade, lineup and rookie-draft advice for Sleeper **dynasty** leagues, football and basketball, in one app:
-`https://derond83.github.io/dynasty-helper/`
+`https://derond83.github.io/front-office/`
 
 - **Football** offense is valued by [KeepTradeCut](https://keeptradecut.com/dynasty-rankings) or
   [Dynasty Daddy](https://dynasty-daddy.com/) in the league's own format (1QB or superflex, KTC's TE-premium level).
