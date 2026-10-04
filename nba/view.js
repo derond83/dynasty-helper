@@ -199,7 +199,7 @@
         const boost = !mine && p.needGroup && result.needs[p.needGroup] >= 0.15 ? ` <span class="tag fit">${p.needGroup} need</span>` : "";
         const fit = p.fit || 0;
         return `<tr class="${mine ? "mine" : ""}">
-          <td class="slot">${mine ? esc(slot) : '<span class="muted">FA</span>'}</td>
+          <td class="slot">${mine ? esc(DH.fmt.slot(slot)) : '<span class="muted">FA</span>'}</td>
           <td class="num">${p.rank ? `<span class="rank">${p.rank}</span>` : '<span class="muted">UR</span>'}</td>
           <td>${nameCell(p)}</td><td>${posChips(p.groups)}</td>
           <td class="num">${ageFmt(p.age)}</td><td class="num">${fmt1(p.fpg)}</td>

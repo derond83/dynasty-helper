@@ -8,7 +8,9 @@
   const ordinal = (n) => n + (["th", "st", "nd", "rd"][((n % 100) - 20) % 10] || ["th", "st", "nd", "rd"][n % 100] || "th");
   const int = (v) => Math.round(v).toLocaleString();
   const pct = (v) => (v == null ? "–" : `${Math.round(v * 100)}%`);
-  DH.fmt = { esc, ordinal, int, pct };
+  // Sleeper slot ids as shown in the app: IDP_FLEX -> IDP FLEX.
+  const slotLabel = (s) => String(s == null ? "" : s).replace(/_/g, " ");
+  DH.fmt = { esc, ordinal, int, pct, slot: slotLabel };
 
   // ---------- Storage ----------
   // Everything lives under "dh."; per-league settings under "dh.L.<league id>.".
@@ -274,7 +276,7 @@
         : `<div class="sb-side"><span class="muted">${matchups.length ? "No opponent this week." : "Matchups for this week aren't set in Sleeper yet."}</span></div>`}
       </div>`;
       // Your lineup only: starters slot by slot, then your bench as BN rows.
-      const row = (slot, id, extra = "") => `<tr class="${extra}"><td class="slot">${esc(slot)}</td><td>${who(id)}${action(id)}</td><td class="num">${id ? f1(pts(id)) : "–"}</td></tr>`;
+      const row = (slot, id, extra = "") => `<tr class="${extra}"><td class="slot">${esc(slotLabel(slot))}</td><td>${who(id)}${action(id)}</td><td class="num">${id ? f1(pts(id)) : "–"}</td></tr>`;
       const starters = slots.map((slot, i) => row(slot, mine[i])).join("");
       const bench = benchOf(mineRoster, mine).map((id, k) => row("BN", id, `bench-row${k ? "" : " first"}`)).join("");
       const table = `<div class="table-wrap"><table class="lineups"><thead><tr><th>Slot</th><th>Player</th><th class="num">Proj</th></tr></thead><tbody>${starters}${bench}</tbody></table></div>`;
@@ -291,7 +293,7 @@
     // Changes
     let changes;
     if (!res.changes.length && !res.emptySlots) changes = '<div class="empty">Your Sleeper lineup is already your best by projections.</div>';
-    else changes = `<ol class="changes">${res.changes.map((c) => `<li>Start ${who(c.start)} <span class="muted">at ${esc(c.slot)}, ${f1(pts(c.start))}</span>${c.sit ? ` over ${who(c.sit)} <span class="muted">${f1(pts(c.sit))}</span> <span class="tag fit">+${f1(pts(c.start) - pts(c.sit))}</span>` : " <span class=\"tag warn\">fills an empty slot</span>"}</li>`).join("")}</ol>`;
+    else changes = `<ol class="changes">${res.changes.map((c) => `<li>Start ${who(c.start)} <span class="muted">at ${esc(slotLabel(c.slot))}, ${f1(pts(c.start))}</span>${c.sit ? ` over ${who(c.sit)} <span class="muted">${f1(pts(c.sit))}</span> <span class="tag fit">+${f1(pts(c.start) - pts(c.sit))}</span>` : " <span class=\"tag warn\">fills an empty slot</span>"}</li>`).join("")}</ol>`;
 
     // Before lineups lock: questionable starters and close calls.
     const notes = [];
@@ -301,7 +303,7 @@
     const tossups = res.me.best.map((id, i) => {
       if (!id) return null;
       const alt = benchIds.filter((b) => sp.fits(b, slots[i]))[0];
-      return alt && pts(id) - pts(alt) < 1 ? `${esc(pname(id))} over ${esc(pname(alt))} at ${esc(slots[i])} is a toss-up (${f1(pts(id))} vs ${f1(pts(alt))})` : null;
+      return alt && pts(id) - pts(alt) < 1 ? `${esc(pname(id))} over ${esc(pname(alt))} at ${esc(slotLabel(slots[i]))} is a toss-up (${f1(pts(id))} vs ${f1(pts(alt))})` : null;
     }).filter(Boolean);
     if (tossups.length) notes.push(`${tossups.slice(0, 3).join("; ")}.`);
 

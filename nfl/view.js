@@ -310,7 +310,7 @@
         const fit = p.fit || 0;
         return `<tr class="${mine ? "mine" : ""}">
           <td class="num muted">${rank}</td>
-          <td class="slot">${mine ? esc(slot) : '<span class="muted">FA</span>'}</td>
+          <td class="slot">${mine ? esc(DH.fmt.slot(slot)) : '<span class="muted">FA</span>'}</td>
           <td>${nameCell(p)}</td><td>${posChips(p.groups)}</td>
           <td class="num">${ageFmt(p.age)}</td><td class="num">${valueCell(p)}</td>
           <td style="white-space:nowrap"><span class="fitbar"><i style="width:${(fit / maxFit * 100).toFixed(0)}%"></i></span>${fit.toFixed(2)}${boost}</td>
