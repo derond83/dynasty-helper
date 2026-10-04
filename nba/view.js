@@ -6,8 +6,8 @@
   const PAGE = 30;
   const AUTO_MAX = 80; // rows shown before "Show more" when reaching for your last player
   const NAMES = { G: "Guards", F: "Forwards", C: "Centers" };
-  const TABS = [{ id: "moves", label: "Moves" }, { id: "trades", label: "Trades" }, { id: "team", label: "Team" },
-    { id: "league", label: "League" }, { id: "settings", label: "Settings", icon: "gear" }];
+  const TABS = [{ id: "team", label: "Team" }, { id: "league", label: "League" }, { id: "moves", label: "Moves" },
+    { id: "trades", label: "Trades" }, { id: "draft", label: "Draft" }, { id: "settings", label: "Settings", icon: "gear" }];
   const MOVE_KNOBS = {
     minGain: { label: "Minimum upgrade", min: 0, max: 0.5, step: 0.01, fmt: (v) => `${Math.round(v * 100)}%`,
       help: "A waiver swap has to add at least this much dynasty value before it's suggested (12% is about 12 ranking spots in the 100–250 range)." },
@@ -119,9 +119,16 @@
 
     function draftHtml() {
       const rd = result.rookieDraft;
-      if (!rd) return "";
+      if (!rd) {
+        const d = ctx.data.draft;
+        const why = !d ? "This league has no rookie draft scheduled on Sleeper yet."
+          : d.status === "complete" ? `The ${esc(d.season || "")} rookie draft is complete.`
+          : "There's no rookies-only draft pending in this league.";
+        return `<section class="section"><div class="section-head"><h2>Rookie draft</h2></div>
+          <div class="empty">${why} When a rookies-only draft is pending, this tab shows a board for each pick you own: the rookies likely to be there and which fit your roster best. Until then, rookies stay on the waiver wire on the Team tab.</div></section>`;
+      }
       const date = rd.start ? new Date(rd.start).toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "date not set";
-      const note = `${rd.rounds}-round ${rd.type} rookie draft, ${date}. Rookies are kept off the waiver wire until it's done. Targets assume the room drafts close to the rankings, with a one-pick cushion, and are sorted by fit for your roster.`;
+      const note = `${rd.rounds}-round ${rd.type} rookie draft, ${date}. Rookies are kept off the waiver wire (Team tab) until it's done. Targets assume the room drafts close to the rankings, with a one-pick cushion, and are sorted by fit for your roster.`;
       let body;
       if (!rd.picks.length) {
         body = `<div class="empty">You don't own a pick in this draft. The top rookies on the board: ${rd.board.slice(0, 6).map((p) => `${esc(p.name)} (${rankText(p)})`).join(", ")}.</div>`;
@@ -307,7 +314,7 @@
     }
 
     const tabBody = () => (ctx.tab === "team" ? `${positionsHtml()}${playersTab()}` : ctx.tab === "trades" ? tradesTab()
-      : ctx.tab === "league" ? leagueTab() : ctx.tab === "settings" ? settingsTab() : `${draftHtml()}${movesHtml()}`);
+      : ctx.tab === "league" ? leagueTab() : ctx.tab === "settings" ? settingsTab() : ctx.tab === "draft" ? draftHtml() : movesHtml());
     el.innerHTML = `${headHtml()}<div data-r="summary">${summaryHtml()}</div>${DH.subtabs(ctx, TABS)}<div class="stack">${tabBody()}</div>`;
     // A slider moved: recompute, refresh the summary and readouts, leave the sliders alone.
     function redrawAfterTuning() {

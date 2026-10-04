@@ -8,8 +8,8 @@
   const GROUP_NAMES = { QB: "Quarterbacks", RB: "Running backs", WR: "Receivers", TE: "Tight ends", DL: "Defensive line", LB: "Linebackers", DB: "Defensive backs" };
   // Sleeper depth chart spots that usually mean a box player (tackles and sacks).
   const BOX = new Set(["SS", "NB", "MLB", "ILB", "LILB", "RILB", "WLB", "SLB", "LB"]);
-  const TABS = [{ id: "moves", label: "Moves" }, { id: "trades", label: "Trades" }, { id: "team", label: "Team" },
-    { id: "league", label: "League" }, { id: "settings", label: "Settings", icon: "gear" }];
+  const TABS = [{ id: "team", label: "Team" }, { id: "league", label: "League" }, { id: "moves", label: "Moves" },
+    { id: "trades", label: "Trades" }, { id: "settings", label: "Settings", icon: "gear" }];
   const TRADE_KNOBS = {
     tradeMinValue: { label: "Value-only trades", min: 0.05, max: 0.4, step: 0.01, fmt: (v) => `+${Math.round(v * 100)}% or more`,
       help: "When a trade doesn't improve your starters, how much more value you must get back than you give. Surplus players (non-starters beyond your target at their position) count at half value." },
