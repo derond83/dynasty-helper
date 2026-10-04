@@ -104,7 +104,7 @@ details.settings > summary .muted { font-weight: 400; font-size: .85rem; }
 
 /* Section heads */
 .section { display: grid; gap: 12px; min-width: 0; }
-.section-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 16px; }
+.section-head { display: grid; gap: 6px; justify-items: start; }
 .section-head p { margin: 0; color: var(--muted); font-size: .9rem; max-width: 75ch; }
 
 /* Position cards */
