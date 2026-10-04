@@ -12,6 +12,8 @@ load("data/nfl/players.js"); load("data/nfl/values.js"); load("data/nfl/idp.js")
 load("data/nba/players.js"); load("data/nba/rankings.js"); load("data/nba/keeper.js");
 const NFL = load("nfl/analysis.js");
 const Draft = load("js/draft.js");
+const Lineup = load("js/lineup.js");
+load("data/nfl/proj.js"); load("data/nba/proj.js");
 const NBA = load("nba/analysis.js");
 
 let failures = 0;
@@ -37,6 +39,28 @@ function checkTrades(res, rosters, myId, tol, eligible) {
     }
   }
 }
+
+test("matchup: best lineup fills every slot it can, beats or ties the set lineup, and win chance is a probability", () => {
+  for (const home of window.HOME_LEAGUES) {
+    load(`data/leagues/${home.id}.js`);
+    const snap = window.LEAGUE_SNAPSHOTS[home.id];
+    const proj = home.sport === "nfl" ? window.PROJ_NFL : window.PROJ_NBA;
+    const players = home.sport === "nfl" ? window.SLEEPER_PLAYERS_NFL : window.SLEEPER_PLAYERS_NBA;
+    const slots = snap.league.roster_positions.filter((s) => !["BN", "IR", "TAXI"].includes(s));
+    const any = { FLEX: ["RB", "WR", "TE"], SUPER_FLEX: ["QB", "RB", "WR", "TE"], IDP_FLEX: ["DL", "LB", "DB"], G: ["PG", "SG", "G"], F: ["SF", "PF", "F"], UTIL: ["PG", "SG", "SF", "PF", "C", "G", "F"] };
+    const fits = (id, slot) => ((players[id] || {}).fantasy_positions || []).some((g) => (any[slot] || [slot]).includes(g));
+    const pts = (id) => (proj.players[id] ? Lineup.score(proj.players[id].s, snap.league.scoring_settings) : 0);
+    const active = (r) => (r.players || []).map(String).filter((id) => !(r.reserve || []).includes(id) && !(r.taxi || []).includes(id));
+    for (const r of snap.rosters) {
+      const res = Lineup.matchup({ slots, fits, pts, spread: (p) => 0.4 * p + 2,
+        mine: { active: active(r), starters: r.starters }, theirs: { active: active(snap.rosters[0]), starters: snap.rosters[0].starters } });
+      assert(res.me.bestTotal + 1e-6 >= res.me.currentTotal, `best ${res.me.bestTotal} < current ${res.me.currentTotal}`);
+      assert(res.me.best.every((id, i) => !id || fits(id, slots[i])), "every starter fits his slot");
+      assert(new Set(res.me.best.filter(Boolean)).size === res.me.best.filter(Boolean).length, "no player starts twice");
+      assert(res.winProb >= 0 && res.winProb <= 1);
+    }
+  }
+});
 
 for (const home of window.HOME_LEAGUES) {
   load(`data/leagues/${home.id}.js`);

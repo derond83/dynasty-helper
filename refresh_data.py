@@ -13,6 +13,7 @@ Sport-wide data (any league of that sport uses it):
   data/nfl/players.js   Sleeper player list (active players on a team, plus anyone on a built-in roster)
   data/nba/rankings.js  Hashtag Basketball dynasty rankings (it blocks direct browser requests)
   data/nba/keeper.js    Hashtag Basketball crowdsourced keeper values, used to judge trades
+  data/<sport>/proj.js  this week's projected stats per player (Sleeper), for the Lineup tab
   data/nba/players.js   Sleeper player list
 
 Built-in leagues (listed in leagues.json) also get a snapshot each, used when Sleeper can't be
@@ -184,6 +185,8 @@ def refresh_league(league_id):
                                            "starters", "settings")} for r in rosters],
         "state": {k: state.get(k) for k in ("season", "week", "season_type", "display_week")},
         "trending": trending,
+        # This week's matchups, so the Lineup tab can find your opponent without Sleeper.
+        "matchups": get_matchups(league_id, state),
         "draft": draft,
         "fetched": datetime.now(timezone.utc).isoformat(timespec="minutes"),
     }
@@ -464,6 +467,58 @@ def refresh_keeper():
     print(f"Keeper values: {len(players)} players ({votes} votes, updated {updated}) -> {path.relative_to(HERE)}")
 
 
+def lineup_week(state):
+    """The week whose lineups matter now: the current regular-season week (week 1 before the season)."""
+    if state.get("season_type") != "regular":
+        return int(state.get("league_season") or state.get("season")), 1
+    return int(state.get("season")), int(state.get("week") or 1)
+
+
+def get_matchups(league_id, state):
+    season, week = lineup_week(state)
+    try:
+        return {"week": week, "teams": [{k: m.get(k) for k in ("roster_id", "matchup_id", "starters", "points")}
+                                        for m in (get(f"{SLEEPER}/league/{league_id}/matchups/{week}") or [])]}
+    except Exception:  # noqa: BLE001 - optional; the page fetches it live too
+        return {"week": week, "teams": []}
+
+
+# Projection fields that are never scoring categories.
+PROJ_SKIP = {"adp_dd_ppr", "pos_adp_dd_ppr", "cmp_pct", "pts_ppr", "pts_half_ppr", "pts_std", "sp", "gp"}
+
+
+def refresh_projections(sport):
+    """This week's projected stats per player, summed over his games (basketball has one entry per game)."""
+    state = get(f"{SLEEPER}/state/{sport}")
+    season, week = lineup_week(state)
+    try:
+        url = f"https://api.sleeper.app/projections/{sport}/{season}/{week}?season_type=regular"
+        if sport == "nfl":
+            url += "".join(f"&position[]={p}" for p in ("QB", "RB", "WR", "TE", "K", "DEF", "DL", "LB", "DB"))
+        rows = get(url)
+        players = {}
+        for r in rows:
+            st = r.get("stats") or {}
+            if not st.get("gp"):
+                continue
+            p = players.setdefault(str(r["player_id"]), {"s": {}, "g": 0, "opp": []})
+            p["g"] += 1
+            if r.get("opponent"):
+                p["opp"].append(r["opponent"])
+            for k, v in st.items():
+                if k not in PROJ_SKIP and isinstance(v, (int, float)) and v:
+                    p["s"][k] = round(p["s"].get(k, 0) + v, 2)
+        if len(players) < 100:
+            raise ValueError(f"only {len(players)} players projected for week {week}")
+    except Exception as e:  # noqa: BLE001
+        warn(f"{sport.upper()} projections: {e}")
+        return
+    path = write_js(f"{sport}/proj.js", f"window.PROJ_{sport.upper()}",
+                    {"season": season, "week": week, "updated": datetime.now(timezone.utc).isoformat(timespec="minutes"),
+                     "players": players})
+    print(f"Projections: {sport} {season} week {week}, {len(players)} players -> {path.relative_to(HERE)}")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--sport", choices=["nfl", "nba"], help="refresh one sport's data only")
@@ -492,10 +547,12 @@ def main():
         refresh_players("nfl", players, rostered["nfl"])
         refresh_values(players)
         refresh_idp(players, season)
+        refresh_projections("nfl")
     if "nba" in sports:
         refresh_players("nba", sleeper_players("nba"), rostered["nba"])
         refresh_rankings()
         refresh_keeper()
+        refresh_projections("nba")
 
     if warnings:
         print(f"\n{len(warnings)} source(s) failed; their last good data was kept.", file=sys.stderr)

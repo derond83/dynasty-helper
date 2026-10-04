@@ -9,7 +9,14 @@
   // Sleeper depth chart spots that usually mean a box player (tackles and sacks).
   const BOX = new Set(["SS", "NB", "MLB", "ILB", "LILB", "RILB", "WLB", "SLB", "LB"]);
   const TABS = [{ id: "team", label: "Team" }, { id: "league", label: "League" }, { id: "moves", label: "Moves" },
-    { id: "trades", label: "Trades" }, { id: "draft", label: "Draft" }, { id: "settings", label: "Settings", icon: "gear" }];
+    { id: "trades", label: "Trades" }, { id: "draft", label: "Draft" }, { id: "matchup", label: "Matchup" },
+    { id: "settings", label: "Settings", icon: "gear" }];
+  // Which Sleeper positions can fill each starting slot (for the Matchup tab).
+  const SLOT_POS = {
+    QB: ["QB"], RB: ["RB"], WR: ["WR"], TE: ["TE"], K: ["K"], DEF: ["DEF"],
+    FLEX: ["RB", "WR", "TE"], WRRB_FLEX: ["RB", "WR"], REC_FLEX: ["WR", "TE"], SUPER_FLEX: ["QB", "RB", "WR", "TE"],
+    DL: ["DL"], LB: ["LB"], DB: ["DB"], IDP_FLEX: ["DL", "LB", "DB"],
+  };
   const TRADE_KNOBS = {
     tradeMinValue: { label: "Value-only trades", min: 0.05, max: 0.4, step: 0.01, fmt: (v) => `+${Math.round(v * 100)}% or more`,
       help: "When a trade doesn't improve your starters, how much more value you must get back than you give. Surplus players (non-starters beyond your target at their position) count at half value." },
@@ -371,6 +378,14 @@
       if (ctx.tab === "league") return leagueTab();
       if (ctx.tab === "trades") return tradesTab();
       if (ctx.tab === "settings") return settingsTab();
+      if (ctx.tab === "matchup") {
+        const pos = (id) => (ctx.data.players[id] && ctx.data.players[id].fantasy_positions) || (/^[A-Z]{2,3}$/.test(id) ? ["DEF"] : []);
+        return DH.matchupHtml(ctx, {
+          sport: "nfl", chips: posChips, groupsOf: pos,
+          fits: (id, slot) => pos(id).some((g) => (SLOT_POS[slot] || []).includes(g)),
+          spread: (pts) => (pts > 0 ? 0.45 * pts + 2 : 0),
+        });
+      }
       if (ctx.tab === "draft") return DH.draftHtml(ctx, result.rookieDraft, result.me.rosterId, {
         basis: `${result.source.label} value`, rank: (p) => int(p.value),
         sub: (p) => `${posChips(p.groups)} ${esc(p.team)} · ${ageFmt(p.age)} yrs`,
@@ -378,7 +393,7 @@
       return movesHtml();
     }
     function draw() {
-      const tabs = DH.visibleTabs(TABS, result.rookieDraft);
+      const tabs = DH.visibleTabs(TABS, result.rookieDraft, ctx.data.league);
       DH.settleTab(ctx, tabs);
       el.innerHTML = `${headHtml()}<div data-r="summary">${summaryHtml()}</div>${DH.subtabs(ctx, tabs)}<div class="stack">${tabBody()}</div>`;
     }

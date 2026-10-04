@@ -15,7 +15,8 @@ Waiver-wire and roster advice for Sleeper **dynasty** leagues, football and bask
 - **League tabs** across the top switch leagues. Each league has its own address (`#/<league id>/<tab>`), so links,
   bookmarks and the back button work. Inside a league: **Team** (positional balance, then your roster and the wire
   in one list), **League** (league value table and how it works), **Moves** (waiver moves), **Trades** (trade ideas),
-  **Draft** (the rookie-draft board; shown only while a rookies-only draft is pending) and **Settings**.
+  **Draft** (the rookie-draft board, while a rookies-only draft is pending) or **Matchup** (this week's matchup, during
+  the season; the two take turns) and **Settings**.
 - **Settings** (per league, saved in this browser): your team, offensive values source (football), how waiver moves
   and trades are judged, trade values source (basketball), and your locked players.
 - **Leagues page** (top right, or **＋ Add league**):
@@ -35,10 +36,11 @@ Waiver-wire and roster advice for Sleeper **dynasty** leagues, football and bask
 | `js/app.js` | League list, navigation, the Leagues page, loading a league. |
 | `js/common.js`, `js/sleeper.js` | Shared helpers and storage; Sleeper API calls. |
 | `js/trades.js` | Trade search and judging, shared by both sports (no DOM). |
+| `js/draft.js`, `js/lineup.js` | Rookie draft board; weekly best lineups and matchup (both sports, no DOM). |
 | `nfl/analysis.js`, `nfl/view.js` | Football: values, IDP model, lineups, move planner (no DOM) / its league page. |
 | `nba/analysis.js`, `nba/view.js` | Basketball: rankings match, lineups, needs, moves, rookie draft (no DOM) / its league page. |
-| `data/nfl/*.js` | Football values (all formats), IDP stats + FantasyPros ranks, Sleeper player list. |
-| `data/nba/*.js` | Hashtag Basketball dynasty rankings and crowdsourced keeper values, Sleeper player list. |
+| `data/nfl/*.js` | Football values (all formats), IDP stats + FantasyPros ranks, this week's projections, Sleeper player list. |
+| `data/nba/*.js` | Hashtag Basketball dynasty rankings and crowdsourced keeper values, this week's projections, Sleeper player list. |
 | `data/leagues/<id>.js`, `data/home.js` | Built-in league snapshots and the built-in list. |
 | `leagues.json` | Which leagues are built in. Add an id here to give a league a daily snapshot. |
 | `refresh_data.py` | Rebuilds everything under `data/`. Python 3, standard library only. |
@@ -49,7 +51,7 @@ Waiver-wire and roster advice for Sleeper **dynasty** leagues, football and bask
 
 `.github/workflows/refresh.yml`:
 
-- runs daily at 10:17 UTC (and on demand from **Actions → Refresh data and deploy → Run workflow**),
+- runs twice a day, at 10:17 and 16:17 UTC (and on demand from **Actions → Refresh data and deploy → Run workflow**),
 - runs `refresh_data.py` for both sports and commits the new data if it changed,
 - runs the smoke tests, then deploys to GitHub Pages. Every push to `main` deploys too.
 
@@ -132,6 +134,22 @@ same player of yours appears in at most two.
 - **Basketball**: on a 0–10,000 market-style scale. By default the average of Hashtag Basketball's crowdsourced
   [keeper values](https://hashtagbasketball.com/keeper) (vote ratings: `10,000 · ((rating − 1,000) / (top − 1,000))^1.2`)
   and its curated dynasty rank (`10,000 · e^(−(rank − 1)/45)`); Settings can switch to either one alone.
+
+## How the Matchup tab works (both sports)
+
+Sleeper's projected stats for the week are scored with the league's own settings (so IDP, kickers, team defenses and
+basketball categories count exactly as the league scores them). Out, IR and suspended players count 0, Doubtful 25%,
+Questionable 85%; football players on bye count 0. A basketball player's week is the sum of his games.
+
+- **Best lineup**: the highest projected total that fits the league's slots (exact search), compared with the lineup set
+  in Sleeper, listed as "Start X over Y (+points)".
+- **Opponent**: this week's opponent from Sleeper's matchups, their best lineup, and their current Sleeper lineup.
+- **Win chance**: the difference in best-lineup totals against the combined spread of both lineups (each player's
+  weekly spread grows with his projection), assuming both teams start their best.
+- **What decides it**: slots where you're ahead or behind, problems in the opponent's set lineup, your questionable
+  starters, and toss-ups between a starter and a bench player.
+
+Projections are refreshed twice a day (6 AM and noon Eastern).
 
 ## Ideas for later
 

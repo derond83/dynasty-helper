@@ -2,8 +2,9 @@ name: Refresh data and deploy
 
 on:
   schedule:
-    # Daily at 10:17 UTC (about 6 AM Eastern). Edit to change how often data refreshes.
-    - cron: "17 10 * * *"
+    # Twice a day: 10:17 and 16:17 UTC (about 6 AM and noon Eastern; the noon run picks up NFL
+    # inactives before Sunday's 1 PM games for the Matchup tab). Edit to change how often data refreshes.
+    - cron: "17 10,16 * * *"
   workflow_dispatch: # "Run workflow" button on the Actions tab
   push:
     branches: [main]

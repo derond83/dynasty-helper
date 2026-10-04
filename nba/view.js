@@ -7,7 +7,11 @@
   const AUTO_MAX = 80; // rows shown before "Show more" when reaching for your last player
   const NAMES = { G: "Guards", F: "Forwards", C: "Centers" };
   const TABS = [{ id: "team", label: "Team" }, { id: "league", label: "League" }, { id: "moves", label: "Moves" },
-    { id: "trades", label: "Trades" }, { id: "draft", label: "Draft" }, { id: "settings", label: "Settings", icon: "gear" }];
+    { id: "trades", label: "Trades" }, { id: "draft", label: "Draft" }, { id: "matchup", label: "Matchup" },
+    { id: "settings", label: "Settings", icon: "gear" }];
+  // Which Sleeper positions can fill each starting slot (for the Matchup tab).
+  const SLOT_POS = { PG: ["PG"], SG: ["SG"], SF: ["SF"], PF: ["PF"], C: ["C"], G: ["PG", "SG", "G"], F: ["SF", "PF", "F"],
+    UTIL: ["PG", "SG", "SF", "PF", "C", "G", "F"] };
   const MOVE_KNOBS = {
     minGain: { label: "Minimum upgrade", min: 0, max: 0.5, step: 0.01, fmt: (v) => `${Math.round(v * 100)}%`,
       help: "A waiver swap has to add at least this much dynasty value before it's suggested (12% is about 12 ranking spots in the 100–250 range)." },
@@ -288,8 +292,19 @@
     }
 
     const tabBody = () => (ctx.tab === "team" ? `${positionsHtml()}${playersTab()}` : ctx.tab === "trades" ? tradesTab()
-      : ctx.tab === "league" ? leagueTab() : ctx.tab === "settings" ? settingsTab() : ctx.tab === "draft" ? draftHtml() : movesHtml());
-    const tabs = DH.visibleTabs(TABS, result.rookieDraft);
+      : ctx.tab === "league" ? leagueTab() : ctx.tab === "settings" ? settingsTab() : ctx.tab === "draft" ? draftHtml()
+      : ctx.tab === "matchup" ? matchupHtml() : movesHtml());
+    function matchupHtml() {
+      const pos = (id) => (ctx.data.players[id] && ctx.data.players[id].fantasy_positions) || [];
+      const groups = (id) => [...new Set(pos(id).map((x) => A.POS_GROUP[x]).filter(Boolean))];
+      return DH.matchupHtml(ctx, {
+        sport: "nba", chips: posChips, groupsOf: groups,
+        fits: (id, slot) => pos(id).some((g) => (SLOT_POS[slot] || []).includes(g)),
+        spread: (pts) => (pts > 0 ? 0.18 * pts + 3 : 0),
+        note: "A player's week is the sum of his games, so more games count. Sleeper basketball lineups lock game by game: check daily for starters without a game that day",
+      });
+    }
+    const tabs = DH.visibleTabs(TABS, result.rookieDraft, ctx.data.league);
     DH.settleTab(ctx, tabs);
     el.innerHTML = `${headHtml()}<div data-r="summary">${summaryHtml()}</div>${DH.subtabs(ctx, tabs)}<div class="stack">${tabBody()}</div>`;
     // A slider moved: recompute, refresh the summary and readouts, leave the sliders alone.

@@ -139,8 +139,12 @@
 
   // ---------- Rookie draft ----------
 
-  /** Tabs to show: the Draft tab only while a rookies-only draft is pending. */
-  DH.visibleTabs = (tabs, rookieDraft) => tabs.filter((t) => t.id !== "draft" || rookieDraft);
+  /**
+   * Tabs to show. Draft and Matchup take turns: Draft while a rookies-only draft is pending,
+   * Matchup during the season otherwise.
+   */
+  DH.visibleTabs = (tabs, rookieDraft, league) => tabs.filter((t) =>
+    t.id === "draft" ? !!rookieDraft : t.id === "matchup" ? !rookieDraft && league.status === "in_season" : true);
 
   /** If the page asks for a tab that isn't shown (e.g. Draft with no draft pending), go to the first one. */
   DH.settleTab = function (ctx, tabs) {
@@ -171,6 +175,126 @@
       }).join("")}</div>`;
     }
     return `<section class="section"><div class="section-head"><h2>Rookie draft</h2><p>${esc(note)}</p></div>${body}</section>`;
+  };
+
+  // ---------- Matchup ----------
+
+  const matchupCache = new Map(); // "<league>:<week>" -> Sleeper matchups (or a pending promise)
+
+  /**
+   * The Matchup tab. sp: { sport, fits(id, slot), spread(points), chips(groups) html, groupsOf(id),
+   * note } — the sport's slot rules. Loads this week's projections and matchups on first view.
+   */
+  DH.matchupHtml = function (ctx, sp) {
+    const Lineup = root.LineupEngine;
+    const proj = root[`PROJ_${sp.sport.toUpperCase()}`];
+    if (!proj) {
+      DH.loadScript(`data/${sp.sport}/proj.js`).then(ctx.rerender, () => {});
+      return '<div class="loading" role="status">Loading this week\'s projections…</div>';
+    }
+    const data = ctx.data, league = data.league, week = proj.week;
+    const key = `${ctx.id}:${week}`;
+    if (!matchupCache.has(key)) {
+      const saved = data.matchups && data.matchups.week === week ? data.matchups.teams : null;
+      matchupCache.set(key, saved);
+      DH.sleeper.get(`/league/${ctx.id}/matchups/${week}`)
+        .then((m) => { matchupCache.set(key, (m || []).map((x) => ({ roster_id: x.roster_id, matchup_id: x.matchup_id, starters: x.starters }))); ctx.rerender(); })
+        .catch(() => {});
+    }
+    const matchups = matchupCache.get(key) || [];
+    const rp = league.roster_positions || [];
+    const slots = rp.filter((s) => !["BN", "IR", "TAXI"].includes(s));
+    const scoring = league.scoring_settings || {};
+    const players = data.players || {};
+    const pname = (id) => (players[id] && players[id].full_name) || (/^[A-Z]{2,3}$/.test(id) ? `${id} defense` : `Player ${id}`);
+    const injury = (id) => (players[id] && players[id].injury_status) || null;
+    const raw = (id) => { const p = proj.players[id]; return p ? Lineup.score(p.s, scoring) : 0; };
+    const factor = (id) => Lineup.AVAILABLE[injury(id)] ?? 1;
+    const pts = (id) => raw(id) * factor(id);
+    const active = (r) => { const out = new Set([...(r.reserve || []), ...(r.taxi || [])].map(String)); return (r.players || []).map(String).filter((id) => !out.has(id)); };
+    const mineRoster = data.rosters.find((r) => String(r.roster_id) === String(ctx.rosterId));
+    const myM = matchups.find((m) => String(m.roster_id) === String(ctx.rosterId));
+    const oppM = myM && myM.matchup_id != null ? matchups.find((m) => m.matchup_id === myM.matchup_id && String(m.roster_id) !== String(ctx.rosterId)) : null;
+    const oppRoster = oppM ? data.rosters.find((r) => r.roster_id === oppM.roster_id) : null;
+    const res = Lineup.matchup({
+      slots, fits: sp.fits, pts, spread: sp.spread,
+      mine: { active: active(mineRoster), starters: (myM && myM.starters) || mineRoster.starters },
+      theirs: oppRoster ? { active: active(oppRoster), starters: (oppM && oppM.starters) || oppRoster.starters } : null,
+    });
+    const f1 = (v) => v.toFixed(1);
+    const oppName = oppRoster ? DH.teamName(data, oppRoster.roster_id) : null;
+    const tag = (id) => {
+      const inj = injury(id), p = proj.players[id];
+      const bits = [];
+      if (inj) bits.push(`<span class="tag inj">${esc(inj)}</span>`);
+      if (!p) bits.push(`<span class="tag warn">${sp.sport === "nfl" ? "No game" : "No games"}</span>`);
+      else if (sp.sport === "nba") bits.push(`<span class="tag">${p.g} game${p.g === 1 ? "" : "s"}</span>`);
+      else if (p.opp && p.opp.length) bits.push(`<span class="muted small">vs ${esc(p.opp.join(", "))}</span>`);
+      return bits.join(" ");
+    };
+    const who = (id) => id ? `<span class="pname"><strong>${esc(pname(id))}</strong> ${sp.chips(sp.groupsOf(id))} ${tag(id)}</span>` : '<span class="muted">Empty</span>';
+
+    // Scoreboard
+    const wp = res.winProb;
+    const board = `<section class="card section scoreboard">
+      <div class="section-head"><h2>Week ${week}${oppName ? ` · vs ${esc(oppName)}` : ""}</h2>
+        <p>Best lineups by projected points, scored with this league's settings${sp.note ? `. ${sp.note}` : ""}.</p></div>
+      <div class="sb-row">
+        <div class="sb-side"><span class="eyebrow">You</span><span class="big">${f1(res.me.bestTotal)}</span>
+          <span class="small muted">Your Sleeper lineup: ${f1(res.me.currentTotal)}${res.me.bestTotal - res.me.currentTotal > 0.05 ? ` (+${f1(res.me.bestTotal - res.me.currentTotal)} with the changes below)` : " (already your best)"}</span></div>
+        ${res.them ? `<div class="sb-mid"><span class="eyebrow">Win chance</span><span class="big">${Math.round(wp * 100)}%</span>
+          <div class="wp" role="img" aria-label="Win chance ${Math.round(wp * 100)} percent"><i style="width:${(wp * 100).toFixed(0)}%"></i></div></div>
+        <div class="sb-side right"><span class="eyebrow">${esc(oppName)}</span><span class="big">${f1(res.them.bestTotal)}</span>
+          <span class="small muted">Their Sleeper lineup: ${f1(res.them.currentTotal)}</span></div>`
+        : `<div class="sb-side"><span class="muted">${matchups.length ? "No opponent this week." : "Matchups for this week aren't set in Sleeper yet."}</span></div>`}
+      </div></section>`;
+
+    // Changes
+    let changes;
+    if (!res.changes.length && !res.emptySlots) changes = '<div class="empty">Your Sleeper lineup is already your best by projections.</div>';
+    else changes = `<ol class="changes">${res.changes.map((c) => `<li>Start ${who(c.start)} <span class="muted">at ${esc(c.slot)}, ${f1(pts(c.start))}</span>${c.sit ? ` over ${who(c.sit)} <span class="muted">${f1(pts(c.sit))}</span> <span class="tag fit">+${f1(pts(c.start) - pts(c.sit))}</span>` : " <span class=\"tag warn\">fills an empty slot</span>"}</li>`).join("")}</ol>`;
+
+    // Slot by slot
+    const rows = res.rows.map((r) => {
+      const a = r.mine ? pts(r.mine) : 0, b = r.theirs ? pts(r.theirs) : 0, d = a - b;
+      return `<tr><td class="slot">${esc(r.slot)}</td><td>${who(r.mine)}</td><td class="num">${f1(a)}</td>
+        ${res.them ? `<td>${who(r.theirs)}</td><td class="num">${f1(b)}</td><td class="num ${d > 0.05 ? "good" : d < -0.05 ? "bad" : ""}">${d > 0 ? "+" : ""}${f1(d)}</td>` : ""}</tr>`;
+    }).join("");
+    const table = `<div class="table-wrap"><table><thead><tr><th>Slot</th><th>You</th><th class="num">Proj</th>${res.them ? `<th>${esc(oppName)}</th><th class="num">Proj</th><th class="num">Edge</th>` : ""}</tr></thead><tbody>${rows}</tbody></table></div>`;
+
+    // What decides it
+    const notes = [];
+    if (res.them) {
+      const bySlot = {};
+      for (const r of res.rows) bySlot[r.slot] = (bySlot[r.slot] || 0) + (r.mine ? pts(r.mine) : 0) - (r.theirs ? pts(r.theirs) : 0);
+      const ranked = Object.entries(bySlot).sort((x, y) => y[1] - x[1]);
+      const plus = ranked.filter(([, d]) => d > 1).slice(0, 3), minus = ranked.filter(([, d]) => d < -1).slice(-3).reverse();
+      if (plus.length) notes.push(`You're ahead at ${plus.map(([g, d]) => `${esc(g)} (+${f1(d)})`).join(", ")}.`);
+      if (minus.length) notes.push(`They're ahead at ${minus.map(([g, d]) => `${esc(g)} (${f1(d)})`).join(", ")}.`);
+      const gap = res.them.bestTotal - res.them.currentTotal;
+      if (gap > 1) {
+        const dead = res.them.current.filter((id) => id && pts(id) === 0).map(pname);
+        notes.push(`Their current Sleeper lineup is ${f1(gap)} points below their best${dead.length ? `; it starts ${esc(dead.join(", "))}, projected for 0` : ""}. If they don't fix it, your chances improve.`);
+      }
+      if (res.them.current.some((id) => !id)) notes.push("They have an empty starting slot right now.");
+    }
+    const risky = res.me.best.filter((id) => id && ["Questionable", "Doubtful"].includes(injury(id)));
+    if (risky.length) notes.push(`Check before kickoff: ${risky.map((id) => `${esc(pname(id))} (${esc(injury(id))})`).join(", ")}. Projections count Questionable at 85% and Doubtful at 25%.`);
+    const benchIds = active(mineRoster).filter((id) => !res.me.best.includes(id));
+    const tossups = res.me.best.map((id, i) => {
+      if (!id) return null;
+      const alt = benchIds.filter((b) => sp.fits(b, slots[i])).sort((x, y) => pts(y) - pts(x))[0];
+      return alt && pts(id) - pts(alt) < 1 ? `${esc(pname(id))} over ${esc(pname(alt))} at ${esc(slots[i])} is a toss-up (${f1(pts(id))} vs ${f1(pts(alt))})` : null;
+    }).filter(Boolean);
+    if (tossups.length) notes.push(`${tossups.slice(0, 3).join("; ")}.`);
+    const bench = benchIds.filter((id) => pts(id) > 0).sort((x, y) => pts(y) - pts(x)).slice(0, 6);
+
+    return `${board}
+      <section class="section"><div class="section-head"><h2>Lineup changes</h2><p>Compared with the lineup you have set in Sleeper for week ${week}.</p></div>${changes}</section>
+      <section class="section"><div class="section-head"><h2>Slot by slot</h2><p>Your best lineup against ${oppName ? `${esc(oppName)}'s best` : "no opponent"}. Out, IR and suspended players count 0; players without a game ${sp.sport === "nfl" ? "(byes)" : ""} count 0.</p></div>${table}</section>
+      ${notes.length ? `<section class="section"><div class="section-head"><h2>What decides it</h2></div><ul class="notes">${notes.map((n) => `<li>${n}</li>`).join("")}</ul></section>` : ""}
+      ${bench.length ? `<section class="section"><div class="section-head"><h2>Best on your bench</h2></div><p class="small">${bench.map((id) => `${esc(pname(id))} <span class="muted">${f1(pts(id))}</span>`).join(" · ")}</p></section>` : ""}
+      <p class="small muted">Projections: Sleeper, week ${week}, refreshed ${esc(new Date(proj.updated).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }))} (twice a day). Win chance assumes both teams start their best lineup.</p>`;
   };
 
   // ---------- Trades ----------
