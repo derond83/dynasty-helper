@@ -143,9 +143,9 @@ Questionable 85%; football players on bye count 0. A basketball player's week is
 
 - **Optimal / Current** toggle (remembered per league): the scoreboard and lineup table show either each team's best
   lineup by projection (exact search over the league's slots) or the lineups set in Sleeper right now.
-- **Lineup table**: slot by slot against this week's opponent (from Sleeper's matchups), then every active bench player
-  on both sides as **BN** rows, by projection. Your players are tagged **Start** (in your best lineup but not set) or
-  **Sit** (set but not in your best lineup).
+- **Lineup table**: your lineup slot by slot, then every active bench player as **BN** rows, by projection. Players are
+  tagged **Start** (in your best lineup but not set) or **Sit** (set but not in your best lineup). The opponent appears
+  only in the scoreboard (their total and the win chance), not player by player.
 - **Win chance**: the difference in totals of the lineups shown against their combined spread (each player's weekly
   spread grows with his projection).
 - **Lineup changes**: "Start X over Y (+points)" against the lineup set in Sleeper.

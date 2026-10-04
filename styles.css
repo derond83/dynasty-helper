@@ -340,3 +340,4 @@ td.good { color: var(--good); font-weight: 600; } td.bad { color: var(--bad); fo
 table.lineups tr.bench-row td { color: var(--muted); }
 table.lineups tr.bench-row td strong { font-weight: 600; }
 table.lineups tr.bench-row.first td { border-top: 2px solid var(--line); }
+table.lineups th:first-child, table.lineups td.slot { width: 96px; }

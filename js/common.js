@@ -258,7 +258,7 @@
     // Scoreboard and lineups, for one view: each team's best lineup, or the lineups set in Sleeper now.
     const pane = (mode) => {
       const cur = mode === "current";
-      const mine = cur ? res.me.current : res.me.best, theirs = res.them ? (cur ? res.them.current : res.them.best) : null;
+      const mine = cur ? res.me.current : res.me.best;
       const myTotal = cur ? res.me.currentTotal : res.me.bestTotal, theirTotal = res.them ? (cur ? res.them.currentTotal : res.them.bestTotal) : 0;
       const wp = cur ? res.winProbCurrent : res.winProb;
       const gap = res.me.bestTotal - res.me.currentTotal;
@@ -273,18 +273,11 @@
         <div class="sb-side right"><span class="eyebrow">${esc(oppName)}</span><span class="big">${f1(theirTotal)}</span><span class="small muted">${theirSub}</span></div>`
         : `<div class="sb-side"><span class="muted">${matchups.length ? "No opponent this week." : "Matchups for this week aren't set in Sleeper yet."}</span></div>`}
       </div>`;
-      const cell = (id, mineSide) => `<td>${who(id)}${mineSide ? action(id) : ""}</td><td class="num">${id ? f1(pts(id)) : "–"}</td>`;
-      const starters = slots.map((slot, i) => {
-        const a = mine[i] ? pts(mine[i]) : 0, b = theirs && theirs[i] ? pts(theirs[i]) : 0, d = a - b;
-        return `<tr><td class="slot">${esc(slot)}</td>${cell(mine[i], true)}
-          ${res.them ? `${cell(theirs[i], false)}<td class="num ${d > 0.05 ? "good" : d < -0.05 ? "bad" : ""}">${d > 0 ? "+" : ""}${f1(d)}</td>` : ""}</tr>`;
-      }).join("");
-      const myBench = benchOf(mineRoster, mine), theirBench = res.them ? benchOf(oppRoster, theirs) : [];
-      const n = Math.max(myBench.length, theirBench.length);
-      const bench = Array.from({ length: n }, (_, k) => `<tr class="bench-row${k ? "" : " first"}"><td class="slot">BN</td>
-        ${myBench[k] ? cell(myBench[k], true) : "<td></td><td></td>"}
-        ${res.them ? `${theirBench[k] ? cell(theirBench[k], false) : "<td></td><td></td>"}<td></td>` : ""}</tr>`).join("");
-      const table = `<div class="table-wrap"><table class="lineups"><thead><tr><th>Slot</th><th>You</th><th class="num">Proj</th>${res.them ? `<th>${esc(oppName)}</th><th class="num">Proj</th><th class="num">Edge</th>` : ""}</tr></thead><tbody>${starters}${bench}</tbody></table></div>`;
+      // Your lineup only: starters slot by slot, then your bench as BN rows.
+      const row = (slot, id, extra = "") => `<tr class="${extra}"><td class="slot">${esc(slot)}</td><td>${who(id)}${action(id)}</td><td class="num">${id ? f1(pts(id)) : "–"}</td></tr>`;
+      const starters = slots.map((slot, i) => row(slot, mine[i])).join("");
+      const bench = benchOf(mineRoster, mine).map((id, k) => row("BN", id, `bench-row${k ? "" : " first"}`)).join("");
+      const table = `<div class="table-wrap"><table class="lineups"><thead><tr><th>Slot</th><th>Player</th><th class="num">Proj</th></tr></thead><tbody>${starters}${bench}</tbody></table></div>`;
       return `<div class="mv mv-${mode}"${mode === view ? "" : " hidden"}>${board}${table}</div>`;
     };
     const toggle = `<div class="seg" role="group" aria-label="Which lineups">${[["best", "Optimal"], ["current", "Current"]]
