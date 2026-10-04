@@ -6,7 +6,8 @@
   const PAGE = 30;
   const AUTO_MAX = 80; // rows shown before "Show more" when reaching for your last player
   const NAMES = { G: "Guards", F: "Forwards", C: "Centers" };
-  const TABS = [{ id: "moves", label: "Moves" }, { id: "trades", label: "Trades" }, { id: "players", label: "Players" }, { id: "settings", label: "Settings", icon: "gear" }];
+  const TABS = [{ id: "moves", label: "Moves" }, { id: "trades", label: "Trades" }, { id: "team", label: "Team" },
+    { id: "league", label: "League" }, { id: "settings", label: "Settings", icon: "gear" }];
   const MOVE_KNOBS = {
     minGain: { label: "Minimum upgrade", min: 0, max: 0.5, step: 0.01, fmt: (v) => `${Math.round(v * 100)}%`,
       help: "A waiver swap has to add at least this much dynasty value before it's suggested (12% is about 12 ranking spots in the 100–250 range)." },
@@ -230,7 +231,6 @@
     }
 
     function playersTab() {
-      const um = result.unmatched;
       const sort = [["rank", "Dynasty rank"], ["fit", "Best fit for my roster"], ["fpg", "Fantasy pts per game"], ["age", "Youngest first"]];
       return `<section class="section">
         <div class="section-head"><h2>Players</h2>
@@ -243,12 +243,7 @@
           <input type="search" data-search placeholder="Search players" aria-label="Search players" value="${esc(view.wireQuery)}">
         </div>
         <div data-r="players" class="section">${playersTable()}</div>
-      </section>
-      <footer>
-        <p><strong>How it works.</strong> Players are matched between Sleeper and the <a href="https://hashtagbasketball.com/fantasy-basketball-dynasty-rankings" target="_blank" rel="noopener">Hashtag Basketball dynasty rankings</a> by name and team. Position eligibility comes from Sleeper (PG/SG count as G, SF/PF as F). Rank is turned into a value that drops off steeply, so #10 is worth far more than #60, while #200 and #260 are close. Need at a position comes from how your starters compare with the league average and how deep you are there. Players outside the top 400 count as unranked.${pointsLeague ? "" : " This league uses category scoring, so the FP/G column is left blank."}</p>
-        <p><strong>Refreshing data.</strong> Your league loads live from Sleeper every time you open it. A scheduled GitHub Action pulls the Hashtag Basketball rankings once a day.</p>
-        <p>${um.length ? `Not matched to a Sleeper player: ${esc(um.map((p) => p.name).join(", "))}.` : "Every ranked player was matched to a Sleeper player."}</p>
-      </footer>`;
+      </section>`;
     }
 
     function settingsSummary() {
@@ -287,8 +282,32 @@
       </section>`;
     }
 
-    const tabBody = () => (ctx.tab === "players" ? playersTab() : ctx.tab === "trades" ? tradesTab() : ctx.tab === "settings" ? settingsTab()
-      : `${positionsHtml()}${draftHtml()}${movesHtml()}`);
+    function leagueTab() {
+      const s = result.standings, me = String(result.me.rosterId);
+      const byLu = s.slice().sort((a, b) => b.lineup - a.lineup).map((x) => x.rosterId);
+      const rows = s.map((t, i) => `<tr class="${String(t.rosterId) === me ? "me" : ""}">
+          <td class="num">${i + 1}</td><td>${esc(DH.teamName(ctx.data, t.rosterId))}</td>
+          <td class="num">${Math.round(t.value).toLocaleString()}</td>
+          <td class="num">${t.lineup.toFixed(0)} <span class="muted small">(${ordinal(byLu.indexOf(t.rosterId) + 1)})</span></td>
+          <td class="num">${t.players}</td>
+        </tr>`).join("");
+      const um = result.unmatched;
+      return `<section class="section">
+        <div class="section-head"><h2>League value</h2>
+          <p>Trade value (${esc({ blend: "blend of keeper values and dynasty rankings", keeper: "crowdsourced keeper values", rankings: "dynasty rankings" }[result.tradeMode])}, 0–10,000 per player) of every player on each roster, IR included. Best lineup is each team's best starting lineup by dynasty value, the measure behind "Best lineup" in the summary.</p></div>
+        <div class="table-wrap"><table>
+          <thead><tr><th class="num">#</th><th>Team</th><th class="num">Trade value</th><th class="num">Best lineup</th><th class="num">Players</th></tr></thead>
+          <tbody>${rows}</tbody></table></div>
+      </section>
+      <footer>
+        <p><strong>How it works.</strong> Players are matched between Sleeper and the <a href="https://hashtagbasketball.com/fantasy-basketball-dynasty-rankings" target="_blank" rel="noopener">Hashtag Basketball dynasty rankings</a> by name and team. Position eligibility comes from Sleeper (PG/SG count as G, SF/PF as F). Rank is turned into a value that drops off steeply, so #10 is worth far more than #60, while #200 and #260 are close. Need at a position comes from how your starters compare with the league average and how deep you are there. Players outside the top 400 count as unranked.${pointsLeague ? "" : " This league uses category scoring, so the FP/G column is left blank."}</p>
+        <p><strong>Refreshing data.</strong> Your league loads live from Sleeper every time you open it. A scheduled GitHub Action pulls the Hashtag Basketball rankings once a day.</p>
+        <p>${um.length ? `Not matched to a Sleeper player: ${esc(um.map((p) => p.name).join(", "))}.` : "Every ranked player was matched to a Sleeper player."}</p>
+      </footer>`;
+    }
+
+    const tabBody = () => (ctx.tab === "team" ? `${positionsHtml()}${playersTab()}` : ctx.tab === "trades" ? tradesTab()
+      : ctx.tab === "league" ? leagueTab() : ctx.tab === "settings" ? settingsTab() : `${draftHtml()}${movesHtml()}`);
     el.innerHTML = `${headHtml()}<div data-r="summary">${summaryHtml()}</div>${DH.subtabs(ctx, TABS)}<div class="stack">${tabBody()}</div>`;
     // A slider moved: recompute, refresh the summary and readouts, leave the sliders alone.
     function redrawAfterTuning() {

@@ -405,8 +405,14 @@
       t.theirRanks = Object.fromEntries(t.fills.map((g) => [g, leagueRank(g, team.profile[g].strength)]));
     }
 
+    // League view: each team's total trade value and best-lineup value.
+    const standings = teams.map((t, i) => ({
+      rosterId: t.roster.roster_id, lineup: lineupTotals[i], players: t.all.length,
+      value: t.all.reduce((sum, id) => sum + (info[id] ? info[id].tradeValue || 0 : 0), 0),
+    })).sort((a, b) => b.value - a.value);
+
     return {
-      cfg, trades, tradeMode: mode,
+      cfg, trades, tradeMode: mode, standings,
       slots, starters, maxActive, scoring, rookieDraft,
       me: {
         rosterId: me.roster.roster_id,

@@ -8,7 +8,7 @@
   const GROUP_NAMES = { QB: "Quarterbacks", RB: "Running backs", WR: "Receivers", TE: "Tight ends", DL: "Defensive line", LB: "Linebackers", DB: "Defensive backs" };
   // Sleeper depth chart spots that usually mean a box player (tackles and sacks).
   const BOX = new Set(["SS", "NB", "MLB", "ILB", "LILB", "RILB", "WLB", "SLB", "LB"]);
-  const TABS = [{ id: "moves", label: "Moves" }, { id: "trades", label: "Trades" }, { id: "players", label: "Players" },
+  const TABS = [{ id: "moves", label: "Moves" }, { id: "trades", label: "Trades" }, { id: "team", label: "Team" },
     { id: "league", label: "League" }, { id: "settings", label: "Settings", icon: "gear" }];
   const TRADE_KNOBS = {
     tradeMinValue: { label: "Value-only trades", min: 0.05, max: 0.4, step: 0.01, fmt: (v) => `+${Math.round(v * 100)}% or more`,
@@ -367,11 +367,11 @@
 
     // ---------- Assemble ----------
     function tabBody() {
-      if (ctx.tab === "players") return playersTab();
+      if (ctx.tab === "team") return `${positionsHtml()}${playersTab()}`;
       if (ctx.tab === "league") return leagueTab();
       if (ctx.tab === "trades") return tradesTab();
       if (ctx.tab === "settings") return settingsTab();
-      return `${positionsHtml()}${movesHtml()}`;
+      return movesHtml();
     }
     function draw() {
       el.innerHTML = `${headHtml()}<div data-r="summary">${summaryHtml()}</div>${DH.subtabs(ctx, TABS)}<div class="stack">${tabBody()}</div>`;

@@ -115,7 +115,11 @@
   async function openLeague(entry, tab) {
     const token = ++current;
     const sport = DH.sports[entry.sport];
-    const tabId = sport.tabs.some((t) => t.id === tab) ? tab : (DH.store.league(entry.id).get("tab", "moves"));
+    // Tabs that were renamed or merged: Players is now part of Team.
+    const RENAMED = { players: "team" };
+    const pick = (t) => (t && sport.tabs.some((x) => x.id === (RENAMED[t] || t)) ? RENAMED[t] || t : null);
+    const tabId = pick(tab) || pick(DH.store.league(entry.id).get("tab", null)) || "moves";
+    if (tab && tab !== tabId) history.replaceState(null, "", `#/${entry.id}/${tabId}`);
     DH.store.set("last", entry.id);
     DH.store.league(entry.id).set("tab", tabId);
     document.title = `${entry.name} · Dynasty Helper`;
