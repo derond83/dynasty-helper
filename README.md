@@ -1,91 +1,111 @@
 # Dynasty Helper
 
-Dashboard for the Sleeper dynasty football league "The League IX" (league `1312071895943745536`):
-12 teams, 1QB, half-PPR, IDP (DL / LB / DB / IDP_FLEX).
-It compares your roster with the waiver wire and suggests add/drop moves that raise your roster's value
-and keep positions balanced.
+Waiver-wire and roster advice for Sleeper **dynasty** leagues, football and basketball, in one app:
+`https://derond83.github.io/dynasty-helper/`
 
-- **Offense** is valued by [KeepTradeCut](https://keeptradecut.com/dynasty-rankings) (1QB) or
-  [Dynasty Daddy](https://dynasty-daddy.com/), picked from the menu at the top. The other source is shown for comparison.
-- **IDP** is valued by a production model built from Sleeper stats and scored with this league's
-  settings, cross-checked against the free FantasyPros dynasty DL / LB / DB rankings. Neither KTC nor Dynasty Daddy values IDP.
+- **Football** offense is valued by [KeepTradeCut](https://keeptradecut.com/dynasty-rankings) or
+  [Dynasty Daddy](https://dynasty-daddy.com/) in the league's own format (1QB or superflex, KTC's TE-premium level).
+  IDP, when the league has it, is valued by a production model scored with the league's settings and cross-checked
+  against the free FantasyPros dynasty DL / LB / DB rankings.
+- **Basketball** uses the [Hashtag Basketball dynasty rankings](https://hashtagbasketball.com/fantasy-basketball-dynasty-rankings),
+  weighted toward the positions (G / F / C) where you're thin, plus a rookie-draft board while a rookie draft is pending.
+
+## Using it
+
+- **League tabs** across the top switch leagues. Each league has its own address (`#/<league id>/<tab>`), so links,
+  bookmarks and the back button work. Inside a league, **Moves**, **Players** and (football) **League** tabs split the page.
+- **Leagues page** (top right, or **＋ Add league**):
+  - *Your Sleeper account*: enter your username once. Every league then opens on your team, your leagues are listed
+    for one-click adding, and leagues are followed when Sleeper starts a new season (a dynasty league gets a new id
+    each season).
+  - *Add by league ID*: any Sleeper league that is **dynasty** and **football or basketball**. Redraft, keeper and
+    guillotine leagues, and other sports, are refused with the reason.
+- Per league, your team choice, locked players and tuning are saved in this browser.
+- The two built-in leagues (`leagues.json`) get a daily snapshot, so they open even if Sleeper can't be reached.
+  Leagues you add load live from Sleeper.
 
 ## Files
 
-| File | What it is |
+| Path | What it is |
 | --- | --- |
-| `index.html` | The dashboard. Your roster and the waiver wire share one Players table (offense or IDP at a time), with your players highlighted. |
-| `analysis.js` | Value lookup, IDP model, lineup optimizer, positional scarcity and the move planner (no DOM). |
-| `values.js` | Offensive dynasty and redraft values from KeepTradeCut and Dynasty Daddy, keyed by Sleeper id. |
-| `idp.js` | Sleeper IDP stat lines for the last three seasons, plus FantasyPros dynasty IDP rankings. |
-| `league-data.js` | Saved copy of the Sleeper league, used when live requests are blocked. |
-| `refresh_data.py` | Rebuilds the three data files. Python 3, standard library only. |
-| `.github/workflows/refresh.yml` | Daily refresh + GitHub Pages deploy. |
+| `index.html`, `styles.css` | The app shell and styles. |
+| `js/app.js` | League list, navigation, the Leagues page, loading a league. |
+| `js/common.js`, `js/sleeper.js` | Shared helpers and storage; Sleeper API calls. |
+| `nfl/analysis.js`, `nfl/view.js` | Football: values, IDP model, lineups, move planner (no DOM) / its league page. |
+| `nba/analysis.js`, `nba/view.js` | Basketball: rankings match, lineups, needs, moves, rookie draft (no DOM) / its league page. |
+| `data/nfl/*.js` | Football values (all formats), IDP stats + FantasyPros ranks, Sleeper player list. |
+| `data/nba/*.js` | Hashtag Basketball rankings, Sleeper player list. |
+| `data/leagues/<id>.js`, `data/home.js` | Built-in league snapshots and the built-in list. |
+| `leagues.json` | Which leagues are built in. Add an id here to give a league a daily snapshot. |
+| `refresh_data.py` | Rebuilds everything under `data/`. Python 3, standard library only. |
+| `tests/smoke.js` | Runs both sports' analysis on the snapshots; `node tests/smoke.js`. |
+| `.github/workflows/refresh.yml` | Daily refresh, smoke tests, GitHub Pages deploy. |
 
 ## Hosting (GitHub Pages)
 
-The site is published by `.github/workflows/refresh.yml`, which:
+`.github/workflows/refresh.yml`:
 
 - runs daily at 10:17 UTC (and on demand from **Actions → Refresh data and deploy → Run workflow**),
-- runs `refresh_data.py` and commits the new data if it changed,
-- deploys the site to GitHub Pages. Every push to `main` deploys too.
+- runs `refresh_data.py` for both sports and commits the new data if it changed,
+- runs the smoke tests, then deploys to GitHub Pages. Every push to `main` deploys too.
 
-One-time setup: **Settings → Pages → Build and deployment → Source: GitHub Actions**.
-The site is then at `https://derond83.github.io/dynasty-helper/`.
-
-Each source is fetched on its own. If one breaks (say KeepTradeCut changes its page), the others still refresh,
-the broken one keeps its last good data, the page shows a warning, and the workflow run is marked failed so GitHub
-emails you. If KeepTradeCut itself can't be read, its values come from Dynasty Daddy's copy of KTC instead.
+Each source is fetched on its own. If one breaks (say KeepTradeCut changes its page), the others still refresh, the
+broken one keeps its last good data, the league page shows a warning, and the run is marked failed so GitHub emails
+you. If KeepTradeCut itself can't be read, its values come from Dynasty Daddy's copy of KTC instead.
 
 ## Run locally
 
 ```sh
-python3 refresh_data.py   # everything
-open index.html           # or double-click it
+python3 refresh_data.py          # both sports + built-in league snapshots (or --sport nfl / --sport nba)
+python3 -m http.server 8000      # then open http://localhost:8000/
+node tests/smoke.js
 ```
 
-The page opens on Aubergines. Pick another team from the menu (the choice is remembered), or link to one with
-`#team-<roster number>`, e.g. `https://derond83.github.io/dynasty-helper/#team-2`.
+## How football suggestions are made
 
-## How suggestions are made
+**Format.** Superflex when the league has a SUPER_FLEX slot or two QB slots. TE premium follows KeepTradeCut's guidance:
+TE+ for a 0.5–1 point TE reception bonus, TE++ for 2 TE slots or a bonus over 1, TE+++ for 2 TE slots and a bonus.
+Dynasty Daddy has no TE-premium values, so its standard values are used (the page says so).
 
-**Offensive value** is the source's 1QB dynasty value. The *win now* setting blends in that source's redraft value.
+**Offensive value** is the source's dynasty value; the *win now* setting blends in its redraft value.
 
-**IDP value**, in roughly points per game:
+**IDP value**, in roughly points per game (IDP leagues only):
 
-1. Score each season with the league's IDP settings (tackles 1.4 solo / 0.7 assist, sack 4.5, TFL 2 …).
-2. Count only part of a player's own big plays (INT, forced fumble, recovery, TD, safety, blocked kick; 35% by default).
-   The rest is replaced by the position average for his snaps, so tackles and sacks drive value.
-3. Weight seasons 3 : 1.5 : 0.6 (this season, last season, two seasons ago), per game played.
-4. Average that with per-snap production projected at the snaps he's playing now, which catches role changes.
+1. Score each season with the league's IDP settings.
+2. Count only part of a player's own big plays (INT, forced fumble, recovery, TD, safety, blocked kick; 35% by default);
+   the rest is the position average for his snaps, so tackles and sacks drive value.
+3. Weight seasons 3 : 1.5 : 0.6 (this season, last, two ago), per game played.
+4. Average with per-snap production projected at the snaps he's playing now (catches role changes).
 5. Shrink small samples toward a replacement-level player at his position.
-6. Discount for age. Production is assumed to end around 33 for DL and 32 for LB and DB, and six or more years left counts fully.
+6. Discount for age (production assumed to end around 33 for DL, 32 for LB/DB; six or more years left counts fully).
 7. Add 5% for DL/LB or LB/DB eligibility.
 8. Blend 30% with FantasyPros: their #k player at a position is worth what the model's #k player is worth.
-   Players they don't rank are capped at the first spot past the end of their list.
 
-The page tags each defender with his Sleeper depth chart spot (SS, NB, MLB …). Box spots are highlighted.
-
-**Positional balance.** Starters per position come from the league's actual best lineups, which shows how FLEX
-and IDP_FLEX get used. Strength is your top starters' value against the other teams. Scarcity compares the
-best free agent with a typical starter.
+Next to each IDP value is points per game above a waiver-level player at his position.
 
 **Moves**, planned one at a time:
 
-- Offense and IDP are managed separately, because their values aren't on the same scale (and IDP trade value is low).
-  A set number of active roster spots are IDP (6 by default, changeable in Tuning); the rest are offense.
-  A move only swaps an offensive player for a defender, or back, to restore that split.
-- A roster keeps at least 2 QB, 3 RB, 3 WR, 2 TE, 2 DL, 2 LB and 2 DB. DL/LB and LB/DB players count for both.
-  Moves that fix a shortfall come first.
-- Otherwise a swap stays on one side of the ball and must add 12% or more value, and at least 150 offensive value
-  or 0.5 IDP points per game.
-- Taxi (locked in season) and IR players are never dropped, and neither is any player you **lock** in the Players table
-  or on a move card. Locks are saved in your browser. Injured free agents (IR, PUP, suspended) stay on the wire but aren't suggested.
+- Each position keeps its dedicated starting slots plus one (superflex counts toward QB; dual-eligible players count
+  for both). Moves that fix a shortfall come first.
+- Offense and IDP are managed separately: a set number of active spots are IDP (IDP starters + 2 by default, in
+  Tuning), the rest offense, and a move only crosses sides to restore that split.
+- Otherwise a swap stays on one side and must add 12% or more value, and at least 150 offensive value or 0.5 IDP points per game.
+- Kickers and team defenses aren't valued; they're left out of lineups and never suggested.
+- Taxi and IR players are never dropped, and neither is any player you **lock**. Injured free agents (IR, PUP,
+  suspended) stay on the wire but aren't suggested.
 
-Every weight above can be changed in the page's **Tuning** panel (saved in your browser). The constants are at the top of `analysis.js`.
+## How basketball suggestions are made
+
+- **Value.** Dynasty rank becomes a 0–100 value: `100 · e^(−(rank−1)/110)`. Unranked players are 0.
+- **Positional need.** For G, F and C: your top starters' value compared with the league average, plus depth against
+  a target of two per starting slot.
+- **Fit.** `value × (1 + 0.6 × need)` at the player's neediest position.
+- **Drops.** Your lowest-value active player whose loss keeps every position at starter depth. A swap must add about
+  12% value. IR players and locked players are never dropped.
+- **Rookie draft.** While a rookies-only draft is pending, rookies are shown on a draft board instead of the waiver wire.
 
 ## Ideas for later
 
 - Trade suggestions (other rosters' players, using the same values).
 - Draft pick values in the league value table.
-- Rookie and taxi planning for the offseason.
+- Rookie and taxi planning for the offseason in football.

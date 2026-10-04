@@ -1,41 +1,57 @@
 #!/usr/bin/env python3
-"""Refresh the data bundled with the dashboard.
+"""Refresh the data bundled with Dynasty Helper.
 
-  python3 refresh_data.py              # everything
-  python3 refresh_data.py --league ID  # use a different Sleeper league
-  python3 refresh_data.py --skip-values --skip-idp   # Sleeper snapshot only
+  python3 refresh_data.py                 # everything
+  python3 refresh_data.py --sport nfl     # one sport's rankings/values only (plus league snapshots)
+  python3 refresh_data.py --skip-leagues  # rankings and values only
 
-Writes three files that index.html loads:
+Sport-wide data (any league of that sport uses it):
 
-  values.js       offensive dynasty + redraft values from KeepTradeCut and Dynasty Daddy,
-                  keyed by Sleeper player id
-  idp.js          IDP stat lines from Sleeper (three seasons) and FantasyPros dynasty
-                  DL / LB / DB rankings, keyed by Sleeper player id
-  league-data.js  snapshot of the Sleeper league, used when live requests are blocked
+  data/nfl/values.js    offensive dynasty + redraft values from KeepTradeCut and Dynasty Daddy, every
+                        format (1QB, superflex, KTC's TE-premium levels), keyed by Sleeper player id
+  data/nfl/idp.js       IDP stat lines from Sleeper (three seasons) and FantasyPros dynasty DL/LB/DB ranks
+  data/nfl/players.js   Sleeper player list (active players on a team, plus anyone on a built-in roster)
+  data/nba/rankings.js  Hashtag Basketball dynasty rankings (it blocks direct browser requests)
+  data/nba/players.js   Sleeper player list
 
-Each source is fetched on its own. If one fails, its last good data is kept, the
-problem is listed under "warnings" in the file, and the script exits with status 1
-once everything else is written, so the scheduled workflow flags it.
+Built-in leagues (listed in leagues.json) also get a snapshot each, used when Sleeper can't be
+reached from the browser:
+
+  data/leagues/<id>.js  league, users, rosters, draft, trending adds
+  data/home.js          the built-in league list
+
+Each source is fetched on its own. If one fails, its last good data is kept, the problem is
+listed under "warnings" in the file, and the script exits with status 1 once everything else is
+written, so the scheduled workflow flags it.
 """
 import argparse, html, json, re, sys, unicodedata, urllib.request
 from datetime import date, datetime, timezone
 from pathlib import Path
 
 HERE = Path(__file__).parent
+DATA = HERE / "data"
 SLEEPER = "https://api.sleeper.app/v1"
 SLEEPER_STATS = "https://api.sleeper.app/stats/nfl"
+UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36"
+
+# Football sources
 KTC_URL = "https://keeptradecut.com/dynasty-rankings?page=0&filters=QB|WR|RB|TE&format=1"
 DD_URL = "https://dynasty-daddy.com/api/v1/player/all/today?market={}"
 # Dynasty Daddy market ids, from its site's FantasyMarket enum.
 DD_MARKETS = {"ktc": 0, "ktc_redraft": 4, "dd": 14, "dd_redraft": 15}
 FP_URL = "https://www.fantasypros.com/nfl/rankings/dynasty-{}.php"
-DEFAULT_LEAGUE = "1312071895943745536"
-UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36"
+# Basketball source
+HB_URL = "https://hashtagbasketball.com/fantasy-basketball-dynasty-rankings"
+HB_STATS = ["FG%", "FT%", "3PM", "PTS", "REB", "AST", "STL", "BLK", "TO"]
 
 OFFENSE = {"QB", "RB", "WR", "TE"}
 IDP = {"DL", "LB", "DB"}
-PLAYER_FIELDS = ["full_name", "team", "position", "fantasy_positions", "injury_status", "age", "active",
-                 "search_rank", "years_exp", "depth_chart_position", "depth_chart_order"]
+NBA_POSITIONS = {"PG", "SG", "SF", "PF", "C", "G", "F"}
+PLAYER_FIELDS = {
+    "nfl": ["full_name", "team", "position", "fantasy_positions", "injury_status", "age", "active",
+            "search_rank", "years_exp", "depth_chart_position", "depth_chart_order"],
+    "nba": ["full_name", "team", "fantasy_positions", "injury_status", "age", "active", "search_rank", "years_exp"],
+}
 # Stat columns kept for IDP players, in this order.
 IDP_STATS = ["gp", "def_snp", "tm_def_snp", "idp_tkl_solo", "idp_tkl_ast", "idp_sack", "idp_tkl_loss",
              "idp_qb_hit", "idp_pass_def", "idp_int", "idp_ff", "idp_fum_rec", "idp_def_td", "idp_safe",
@@ -45,6 +61,9 @@ SUFFIXES = {"jr", "sr", "ii", "iii", "iv", "v"}
 ALIASES = {"gabriel davis": "gabe davis"}
 # KeepTradeCut team codes that differ from Sleeper's.
 KTC_TEAMS = {"TBB": "TB", "GBP": "GB", "KCC": "KC", "NEP": "NE", "NOS": "NO", "SFO": "SF", "LVR": "LV", "JAC": "JAX"}
+# KeepTradeCut value formats: base (1QB / superflex) and its three TE-premium levels.
+KTC_FORMATS = {"1qb": "oneQBValues", "sf": "superflexValues"}
+TEP_LEVELS = ("tep", "tepp", "teppp")
 
 warnings = []
 
@@ -56,17 +75,19 @@ def get(url, as_json=True):
     return json.loads(body) if as_json else body
 
 
-def write_js(name, var, payload):
-    path = HERE / name
-    path.write_text(f"window.{var} = " + json.dumps(payload, separators=(",", ":")) + ";\n")
+def write_js(rel, target, payload):
+    """Write `<target> = <payload>;` to data/<rel>. target is a JS assignment target."""
+    path = DATA / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(f"{target} = " + json.dumps(payload, separators=(",", ":")) + ";\n")
     return path
 
 
-def read_js(name):
+def read_js(rel):
     """The payload of a previously written data file, or {}."""
     try:
-        text = (HERE / name).read_text()
-        return json.loads(text[text.index("=") + 1:].strip().rstrip(";"))
+        text = (DATA / rel).read_text()
+        return json.loads(text[text.index("= ") + 2:].strip().rstrip(";"))
     except (OSError, ValueError):
         return {}
 
@@ -84,8 +105,8 @@ def warn(msg):
 
 # ---------- Sleeper ----------
 
-def sleeper_players():
-    players = get(f"{SLEEPER}/players/nfl")
+def sleeper_players(sport):
+    players = get(f"{SLEEPER}/players/{sport}")
     for p in players.values():
         if not p.get("full_name"):
             p["full_name"] = " ".join(x for x in (p.get("first_name"), p.get("last_name")) if x)
@@ -125,38 +146,53 @@ class Matcher:
         return ids[0]
 
 
-def refresh_league(league_id, players):
-    league = get(f"{SLEEPER}/league/{league_id}")
-    users = get(f"{SLEEPER}/league/{league_id}/users")
-    rosters = get(f"{SLEEPER}/league/{league_id}/rosters")
-    state = get(f"{SLEEPER}/state/nfl")
-    trending = get(f"{SLEEPER}/players/nfl/trending/add?lookback_hours=48&limit=100")
-
-    rostered = {pid for r in rosters for pid in (r.get("players") or [])}
+def refresh_players(sport, players, rostered):
+    """The sport's player list: active players on a team, plus anyone on a built-in roster."""
+    relevant = (OFFENSE | IDP) if sport == "nfl" else NBA_POSITIONS
     keep = {}
     for pid, p in players.items():
         fp = set(p.get("fantasy_positions") or [])
-        if pid in rostered or (p.get("active") and p.get("team") and fp & (OFFENSE | IDP)):
-            keep[pid] = {k: p.get(k) for k in PLAYER_FIELDS}
+        if pid in rostered or (p.get("active") and p.get("team") and fp & relevant):
+            keep[pid] = {k: p.get(k) for k in PLAYER_FIELDS[sport]}
+    path = write_js(f"{sport}/players.js", f"window.SLEEPER_PLAYERS_{sport.upper()}", keep)
+    print(f"Players: {sport} {len(keep)} -> {path.relative_to(HERE)}")
 
+
+def refresh_league(league_id):
+    league = get(f"{SLEEPER}/league/{league_id}")
+    sport = league.get("sport")
+    users = get(f"{SLEEPER}/league/{league_id}/users")
+    rosters = get(f"{SLEEPER}/league/{league_id}/rosters")
+    state = get(f"{SLEEPER}/state/{sport}")
+    trending = get(f"{SLEEPER}/players/{sport}/trending/add?lookback_hours=48&limit=100")
+    draft = None
+    if league.get("draft_id"):
+        d = get(f"{SLEEPER}/draft/{league['draft_id']}")
+        draft = {k: d.get(k) for k in ("draft_id", "status", "type", "season", "start_time", "slot_to_roster_id")}
+        draft["rounds"] = (d.get("settings") or {}).get("rounds")
+        draft["player_type"] = (d.get("settings") or {}).get("player_type")
+        draft["traded_picks"] = get(f"{SLEEPER}/draft/{league['draft_id']}/traded_picks")
     payload = {
-        "league": {k: league.get(k) for k in ("league_id", "name", "season", "status", "roster_positions",
-                                              "scoring_settings", "settings", "total_rosters")},
+        "league": {k: league.get(k) for k in ("league_id", "name", "sport", "season", "status", "draft_id",
+                                              "previous_league_id", "roster_positions", "scoring_settings",
+                                              "settings", "total_rosters")},
         "users": [{"user_id": u["user_id"], "display_name": u.get("display_name"),
                    "team_name": (u.get("metadata") or {}).get("team_name")} for u in users],
-        "rosters": [{k: r.get(k) for k in ("roster_id", "owner_id", "players", "reserve", "taxi", "starters", "settings")}
-                    for r in rosters],
+        "rosters": [{k: r.get(k) for k in ("roster_id", "owner_id", "co_owners", "players", "reserve", "taxi",
+                                           "starters", "settings")} for r in rosters],
         "state": {k: state.get(k) for k in ("season", "week", "season_type", "display_week")},
         "trending": trending,
-        "players": keep,
+        "draft": draft,
         "fetched": datetime.now(timezone.utc).isoformat(timespec="minutes"),
     }
-    path = write_js("league-data.js", "SLEEPER_SNAPSHOT", payload)
-    print(f"Sleeper: {league.get('name')} ({len(rosters)} teams, {len(keep)} players) -> {path.name}")
-    return payload
+    path = write_js(f"leagues/{league_id}.js",
+                    f'(window.LEAGUE_SNAPSHOTS = window.LEAGUE_SNAPSHOTS || {{}})["{league_id}"]', payload)
+    print(f"League: {league.get('name')} ({sport}, {len(rosters)} teams) -> {path.relative_to(HERE)}")
+    rostered = {pid for r in rosters for pid in (r.get("players") or [])}
+    return {"id": league_id, "sport": sport, "name": league.get("name"), "season": league.get("season")}, rostered
 
 
-# ---------- Offensive values: KeepTradeCut + Dynasty Daddy ----------
+# ---------- Football values: KeepTradeCut + Dynasty Daddy ----------
 
 def parse_ktc(page):
     m = re.search(r'<script[^>]*id="ktc-players"[^>]*>(.*?)</script>', page, re.S)
@@ -173,19 +209,31 @@ def dd_market(market):
     return rows
 
 
-def dd_table(rows):
-    """{sleeper_id: [value, change over the last month]} for offensive players."""
+def dd_table(rows, sf=False):
+    """{sleeper_id: [value, change over the last month]} for offensive players, 1QB or superflex."""
+    key, last_key = ("sf_trade_value", "last_month_value_sf") if sf else ("trade_value", "last_month_value")
     out = {}
     for r in rows:
-        sid, v = r.get("sleeper_id"), r.get("trade_value")
+        sid, v = r.get("sleeper_id"), r.get(key)
         if sid and v and r.get("position") in OFFENSE:
-            last = r.get("last_month_value")
+            last = r.get(last_key)
             out[str(sid)] = [int(v), int(v - last) if last else 0]
     return out
 
 
+def dd_formats(rows):
+    return {"1qb": dd_table(rows), "sf": dd_table(rows, sf=True)}
+
+
+def upgrade_old(table):
+    """Values files before superflex support held one flat 1QB table; nest it."""
+    if table and all(isinstance(v, list) for v in table.values()):
+        return {"1qb": table}
+    return table or {}
+
+
 def refresh_values(players):
-    old = read_js("values.js").get("sources", {})
+    old = read_js("nfl/values.js").get("sources", {})
     sources = {}
     matcher = Matcher(players)
 
@@ -207,53 +255,63 @@ def refresh_values(players):
         for r in dd_rows.get("ktc", []):
             if r.get("sleeper_id"):
                 dd_ids[(norm(r.get("full_name")), r.get("position"))] = str(r["sleeper_id"])
-        dynasty, unmatched = {}, []
-        trend = dd_table(dd_rows.get("ktc", []))
+        trend = dd_formats(dd_rows.get("ktc", []))
+        formats = {f: {} for f in KTC_FORMATS}
+        formats.update({f"{f}_{t}": {} for f in KTC_FORMATS for t in TEP_LEVELS})
+        unmatched = []
         for r in rows:
-            v = (r.get("oneQBValues") or {}).get("value")
-            if not v:
-                continue
             sid = dd_ids.get((norm(r["playerName"]), r["position"])) or \
                 matcher.find(r["playerName"], {r["position"]}, KTC_TEAMS.get(r.get("team"), r.get("team")))
             if not sid:
                 unmatched.append(r["playerName"])
                 continue
-            dynasty[sid] = [int(v), trend.get(sid, [0, 0])[1]]
-        ktc = {"dynasty": dynasty, "unmatched": unmatched, "via": KTC_URL.split("?")[0]}
+            for fmt, key in KTC_FORMATS.items():
+                vals = r.get(key) or {}
+                if vals.get("value"):
+                    formats[fmt][sid] = [int(vals["value"]), trend[fmt].get(sid, [0, 0])[1]]
+                # TE premium only changes tight ends; other positions use the base value.
+                if r["position"] == "TE":
+                    for t in TEP_LEVELS:
+                        v = (vals.get(t) or {}).get("value")
+                        if v:
+                            formats[f"{fmt}_{t}"][sid] = int(v)
+        ktc = {"dynasty": formats, "unmatched": unmatched, "via": KTC_URL.split("?")[0]}
     except Exception as e:  # noqa: BLE001
         warn(f"KeepTradeCut: {e}")
         if "ktc" in dd_rows:
-            ktc = {"dynasty": dd_table(dd_rows["ktc"]), "unmatched": [],
+            ktc = {"dynasty": dd_formats(dd_rows["ktc"]), "unmatched": [],
                    "via": "Dynasty Daddy's copy of KeepTradeCut (KTC itself could not be read)"}
 
-    def assemble(name, label, url, dynasty, redraft_key, prev):
-        if dynasty is None and not prev:
+    def assemble(name, label, url, fresh, redraft_key, prev):
+        if fresh is None and not prev:
             return
         src = dict(prev or {})
+        src["dynasty"] = upgrade_old(src.get("dynasty"))
+        src["redraft"] = upgrade_old(src.get("redraft"))
         src.update({"label": label, "url": url})
-        if dynasty is not None:
-            src.update(dynasty)
+        if fresh is not None:
+            src.update(fresh)
             src["updated"] = date.today().isoformat()
         if redraft_key in dd_rows:
-            src["redraft"] = dd_table(dd_rows[redraft_key])
+            src["redraft"] = dd_formats(dd_rows[redraft_key])
         sources[name] = src
 
-    assemble("ktc", "KeepTradeCut", "https://keeptradecut.com/dynasty-rankings",
-             ktc, "ktc_redraft", old.get("ktc"))
-    dd = {"dynasty": dd_table(dd_rows["dd"]), "unmatched": [], "via": DD_URL.format(14)} if "dd" in dd_rows else None
+    assemble("ktc", "KeepTradeCut", "https://keeptradecut.com/dynasty-rankings", ktc, "ktc_redraft", old.get("ktc"))
+    dd = {"dynasty": dd_formats(dd_rows["dd"]), "unmatched": [], "via": DD_URL.format(14)} if "dd" in dd_rows else None
     assemble("dd", "Dynasty Daddy", "https://dynasty-daddy.com/", dd, "dd_redraft", old.get("dd"))
 
     if not sources:
         raise SystemExit("No value source could be read and there is no saved copy.")
     payload = {"updated": date.today().isoformat(), "sources": sources,
-               "warnings": [w for w in warnings if not w.startswith("IDP")]}
-    path = write_js("values.js", "DYNASTY_VALUES", payload)
-    for k, s in sources.items():
-        print(f"Values: {s['label']} {len(s.get('dynasty', {}))} dynasty / {len(s.get('redraft', {}))} redraft "
-              f"({len(s.get('unmatched', []))} unmatched) -> {path.name}")
+               "warnings": [w for w in warnings if not w.startswith("IDP") and not w.startswith("NBA")]}
+    path = write_js("nfl/values.js", "window.DYNASTY_VALUES", payload)
+    for s in sources.values():
+        d = s.get("dynasty", {})
+        print(f"Values: {s['label']} " + ", ".join(f"{f} {len(v)}" for f, v in d.items()) +
+              f" ({len(s.get('unmatched', []))} unmatched) -> {path.relative_to(HERE)}")
 
 
-# ---------- IDP: Sleeper stats + FantasyPros ----------
+# ---------- Football IDP: Sleeper stats + FantasyPros ----------
 
 def idp_season(season):
     rows = get(f"{SLEEPER_STATS}/{season}?season_type=regular&position[]=DL&position[]=LB&position[]=DB")
@@ -274,7 +332,7 @@ def parse_fp(page):
 
 
 def refresh_idp(players, season):
-    old = read_js("idp.js")
+    old = read_js("nfl/idp.js")
     matcher = Matcher(players)
     seasons = dict(old.get("seasons") or {})
     for y in (season - 2, season - 1, season):
@@ -308,27 +366,97 @@ def refresh_idp(players, season):
 
     payload = {"updated": date.today().isoformat(), "fields": IDP_STATS, "seasons": seasons,
                "fantasypros": fp, "warnings": [w for w in warnings if w.startswith("IDP")]}
-    path = write_js("idp.js", "IDP_DATA", payload)
+    path = write_js("nfl/idp.js", "window.IDP_DATA", payload)
     print(f"IDP: seasons {sorted(seasons)} ({', '.join(str(len(v)) for v in seasons.values())} players), "
-          f"FantasyPros {', '.join(g + ' ' + str(len(v['ranks'])) for g, v in fp.items())} -> {path.name}")
+          f"FantasyPros {', '.join(g + ' ' + str(len(v['ranks'])) for g, v in fp.items())} -> {path.relative_to(HERE)}")
+
+
+# ---------- Basketball: Hashtag Basketball ----------
+
+def text(s):
+    return html.unescape(re.sub(r"<[^>]+>", "", s)).strip()
+
+
+def parse_rankings(page):
+    players = []
+    for card in page.split('<div class="card dyn-card">')[1:]:
+        rank = re.search(r'class="dyn-rank">\s*(\d+)', card)
+        name = re.search(r'class="dyn-name">(.*?)<span', card, re.S)
+        if not (rank and name):
+            continue
+        meta = re.search(r'class="dyn-meta">(.*?)</div>', card, re.S).group(1)
+        badges = [text(b) for b in re.findall(r"<span[^>]*badge[^>]*>(.*?)</span>", meta, re.S)]
+        age = next((float(b[:-2]) for b in badges if re.fullmatch(r"[\d.]+yo", b)), None)
+        pos = [b for b in badges if b in ("PG", "SG", "SF", "PF", "C")]
+        team = next((b for b in badges if not b.endswith("yo") and b not in pos), "") or "FA"
+        trend = re.search(r'class="dyn-trend">\s*<i class="fa ([^"]+)"></i>\s*(\d*)', card)
+        move = 0
+        if trend and trend.group(2):
+            move = int(trend.group(2)) * (1 if "up" in trend.group(1) else -1)
+        stats = {lab: float(val) for val, lab in
+                 re.findall(r'<div class="m [^"]*">([-\d.]+)<small>([^<]+)</small>', card)}
+        gp = re.search(r'Season</td>\s*<td class="d-none">[^<]*</td>\s*<td>(\d+)</td>', card)
+        outlook = re.search(r'class="dyn-outlook">(.*?)</div>', card, re.S)
+        hbid = re.search(r"href='/(\d+)/dynasty'", card)
+        players.append({
+            "rank": int(rank.group(1)), "name": text(name.group(1)), "pos": pos, "team": team,
+            "age": age, "move": move, "gp": int(gp.group(1)) if gp else None,
+            "stats": {k: stats.get(k) for k in HB_STATS},
+            "outlook": text(outlook.group(1)) if outlook else "",
+            "hbid": hbid.group(1) if hbid else None,
+        })
+    return players
+
+
+def refresh_rankings():
+    try:
+        players = parse_rankings(get(HB_URL, as_json=False))
+        if len(players) < 100:
+            raise ValueError(f"only parsed {len(players)} ranked players; the rankings page layout may have changed")
+    except Exception as e:  # noqa: BLE001
+        warn(f"NBA Hashtag Basketball: {e}")
+        old = read_js("nba/rankings.js")
+        if old:  # keep the last good rankings, flagged so the page can say so
+            old["warnings"] = [f"Hashtag Basketball: {e}"]
+            write_js("nba/rankings.js", "window.HB_RANKINGS", old)
+        return
+    path = write_js("nba/rankings.js", "window.HB_RANKINGS",
+                    {"source": HB_URL, "updated": date.today().isoformat(), "players": players, "warnings": []})
+    print(f"Rankings: {len(players)} players -> {path.relative_to(HERE)}")
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--league", default=DEFAULT_LEAGUE, help="Sleeper league ID")
-    ap.add_argument("--skip-values", action="store_true")
-    ap.add_argument("--skip-idp", action="store_true")
-    ap.add_argument("--skip-sleeper", action="store_true")
+    ap.add_argument("--sport", choices=["nfl", "nba"], help="refresh one sport's data only")
+    ap.add_argument("--skip-leagues", action="store_true", help="don't snapshot the built-in leagues")
     args = ap.parse_args()
+    sports = [args.sport] if args.sport else ["nfl", "nba"]
 
-    players = sleeper_players()
-    season = int(get(f"{SLEEPER}/state/nfl").get("season") or date.today().year)
-    if not args.skip_sleeper:
-        refresh_league(args.league, players)
-    if not args.skip_values:
+    home_ids = json.loads((HERE / "leagues.json").read_text())["leagues"]
+    rostered = {"nfl": set(), "nba": set()}
+    home = read_js("home.js") or []
+    if not args.skip_leagues:
+        home = []
+        for lid in home_ids:
+            try:
+                entry, ids = refresh_league(lid)
+            except Exception as e:  # noqa: BLE001
+                warn(f"League {lid}: {e}")
+                continue
+            home.append(entry)
+            rostered.setdefault(entry["sport"], set()).update(ids)
+        write_js("home.js", "window.HOME_LEAGUES", home)
+
+    if "nfl" in sports:
+        players = sleeper_players("nfl")
+        season = int(get(f"{SLEEPER}/state/nfl").get("season") or date.today().year)
+        refresh_players("nfl", players, rostered["nfl"])
         refresh_values(players)
-    if not args.skip_idp:
         refresh_idp(players, season)
+    if "nba" in sports:
+        refresh_players("nba", sleeper_players("nba"), rostered["nba"])
+        refresh_rankings()
+
     if warnings:
         print(f"\n{len(warnings)} source(s) failed; their last good data was kept.", file=sys.stderr)
         sys.exit(1)

@@ -1,0 +1,276 @@
+// Basketball league page: Moves / Players tabs. Uses WaiverAnalysis (nba/analysis.js).
+(function () {
+  "use strict";
+  const DH = window.DH;
+  const { esc, ordinal } = DH.fmt;
+  const PAGE = 30;
+  const AUTO_MAX = 80; // rows shown before "Show more" when reaching for your last player
+  const NAMES = { G: "Guards", F: "Forwards", C: "Centers" };
+  const TABS = [{ id: "moves", label: "Moves" }, { id: "players", label: "Players" }];
+
+  const views = new Map();
+  const viewOf = (id) => {
+    if (!views.has(id)) views.set(id, { wirePos: "all", wireShow: "both", wireSort: "rank", wireQuery: "", wireShown: null, open: new Set() });
+    return views.get(id);
+  };
+
+  function render(ctx, el) {
+    const A = window.WaiverAnalysis;
+    const rankings = window.HB_RANKINGS;
+    const view = viewOf(ctx.id);
+    const locked = new Set((ctx.store.get("locked", []) || []).map(String));
+    const result = A.analyze(ctx.data, rankings.players, ctx.rosterId, { locked: [...locked] });
+    const scoring = ctx.data.league.scoring_settings || {};
+    const pointsLeague = !!(scoring.pts || scoring.reb || scoring.ast);
+
+    const posChips = (groups) => `<span class="chips">${groups.map((g) => `<span class="pos" data-g="${g}">${g}</span>`).join("")}</span>`;
+    const moveTag = (m) => (m > 0 ? `<span class="mv-up" title="Moved up ${m} in the latest rankings update">▲${m}</span>`
+      : m < 0 ? `<span class="mv-down" title="Moved down ${-m} in the latest rankings update">▼${-m}</span>` : "");
+    const injTag = (p) => (p.injury ? `<span class="tag inj">${esc(p.injury)}</span>` : "");
+    const hotTag = (p) => (p.trending ? `<span class="tag hot" title="Sleeper adds in the last 48 hours">${p.trending.toLocaleString()} adds</span>` : "");
+    const rankText = (p) => (p.rank ? `#${p.rank}` : "Unranked");
+    const fmt1 = (v) => (v == null || !pointsLeague ? "–" : v.toFixed(1));
+    const ageFmt = (v) => (v ? v.toFixed(1) : "–");
+    const lockBtn = (p) => DH.lockBtn(locked, p);
+    const nameCell = (p) => `<div class="pname"><button type="button" data-open="${esc(p.id)}" aria-expanded="${view.open.has(p.id)}">${esc(p.name)}</button>
+      <span class="team">${esc(p.team)}</span>${moveTag(p.move)}${injTag(p)}${hotTag(p)}</div>`;
+    const detailRow = (p, cols) => {
+      const link = p.hbid ? `<a href="https://hashtagbasketball.com/${encodeURIComponent(p.hbid)}/dynasty" target="_blank" rel="noopener">Dynasty profile on Hashtag Basketball</a>` : "";
+      const gp = p.gp ? `${p.gp} games last season. ` : "";
+      return `<tr class="detail"><td colspan="${cols}"><div>
+        ${p.outlook ? `<span>${esc(p.outlook)}</span>` : "<span>No dynasty outlook written for this player.</span>"}
+        <span>${gp}${link}</span></div></td></tr>`;
+    };
+
+    function headHtml() {
+      const L = ctx.data.league;
+      const meta = `Sleeper · ${L.season} dynasty · ${L.total_rosters} teams · ${pointsLeague ? "points" : "categories"} scoring`;
+      const extra = [`Hashtag Basketball dynasty rankings, ${esc(rankings.updated)} (${rankings.players.length} players)`];
+      return DH.leagueHead(ctx, { meta }) + DH.sourceLine(ctx, extra) + DH.warnBanner(rankings.warnings || []);
+    }
+
+    function summaryHtml() {
+      const me = result.me, rd = result.rookieDraft;
+      const needs = result.positions.filter((p) => p.label !== "solid").map((p) => p.group);
+      const cells = [
+        [`${ordinal(me.lineupRank)}<small> of ${result.positions[0].teams}</small>`, "Best lineup, by dynasty value"],
+        [needs.length ? needs.join(" · ") : "None", "Positions to address"],
+        [`${me.rosterCount}<small> / ${result.maxActive}</small>`, `Active roster${me.reserve.length ? ` · ${me.reserve.length} on IR` : ""}${me.locked ? ` · ${me.locked} locked` : ""}`],
+        [`$${me.faab}`, "FAAB remaining"],
+      ];
+      if (rd) cells.push([rd.picks.length ? rd.picks.map((p) => `${p.round}.${String(p.pick).padStart(2, "0")}`).join(", ") : "None", "Your rookie picks"]);
+      return DH.summary(cells);
+    }
+
+    function positionsHtml() {
+      const info = result.info;
+      const labels = { need: "Need", thin: "Thin", solid: "Solid" };
+      const counts = result.positions.map((p) => `${p.starters} ${p.group}`).join(", ");
+      const cards = result.positions.map((p) => {
+        const scale = Math.max(p.leagueBest, p.strength) * 1.08 || 1;
+        const w = (v) => Math.min(100, (v / scale) * 100).toFixed(1);
+        const starters = p.top.map((id) => `${esc(info[id].name)} <span class="muted">${rankText(info[id])}</span>`).join("<br>") || "None";
+        return `<article class="pos-card" data-g="${p.group}">
+          <div class="row1"><div class="letter">${p.group}<small>${NAMES[p.group]}</small></div><span class="pill ${p.label}">${labels[p.label]}</span></div>
+          <div class="meter" role="img" aria-label="Your starters ${p.strength.toFixed(0)}, league average ${p.leagueAvg.toFixed(0)}, best ${p.leagueBest.toFixed(0)}">
+            <div class="fill" style="width:${w(p.strength)}%"></div>
+            <div class="tick" style="left:${w(p.leagueAvg)}%" title="League average"></div>
+            <div class="tick best" style="left:calc(${w(p.leagueBest)}% - 2px)" title="Best in league"></div>
+          </div>
+          <div class="meter-legend"><span>You ${p.strength.toFixed(0)}</span><span>League avg ${p.leagueAvg.toFixed(0)} · best ${p.leagueBest.toFixed(0)}</span></div>
+          <dl class="facts">
+            <dt>Starters</dt><dd>${ordinal(p.leagueRank)} of ${p.teams}</dd>
+            <dt>Depth</dt><dd>${p.depth} eligible <span class="muted">(aim for ${p.target})</span></dd>
+            <dt>Top ${p.starters}</dt><dd>${starters}</dd>
+          </dl>
+        </article>`;
+      }).join("");
+      return `<section class="section"><div class="section-head"><h2>Positional balance</h2>
+          <p>Starter strength is the dynasty value of your top players at each position (${counts}) compared with the other teams. Depth counts every player eligible there, aiming for two per starting slot.</p></div>
+        <div class="positions">${cards}</div></section>`;
+    }
+
+    function draftHtml() {
+      const rd = result.rookieDraft;
+      if (!rd) return "";
+      const date = rd.start ? new Date(rd.start).toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "date not set";
+      const note = `${rd.rounds}-round ${rd.type} rookie draft, ${date}. Rookies are kept off the waiver wire until it's done. Targets assume the room drafts close to the rankings, with a one-pick cushion, and are sorted by fit for your roster.`;
+      let body;
+      if (!rd.picks.length) {
+        body = `<div class="empty">You don't own a pick in this draft. The top rookies on the board: ${rd.board.slice(0, 6).map((p) => `${esc(p.name)} (${rankText(p)})`).join(", ")}.</div>`;
+      } else {
+        body = `<div class="picks">${rd.picks.map((pk) => {
+          const from = String(pk.fromRoster) !== String(result.me.rosterId) ? `<small>via ${esc(DH.teamName(ctx.data, pk.fromRoster))}</small>` : "";
+          const items = pk.targets.map((p, i) => `<li><span class="nm">${esc(p.name)}</span><span class="rank">${rankText(p)}</span>
+              <span class="sub">${posChips(p.groups)} ${esc(p.team)} · ${ageFmt(p.age)} yrs${i === 0 ? ' <span class="tag fit">Top fit</span>' : ""}</span></li>`).join("");
+          return `<article class="pick">
+            <div class="num">${pk.round}.${String(pk.pick).padStart(2, "0")}${from}</div>
+            <div class="small muted">Pick ${pk.overall} overall · about ${pk.expected ? `the ${ordinal(pk.overall)}-best rookie` : "end of the board"}</div>
+            <ol>${items || '<li class="muted">No ranked rookies expected to be left.</li>'}</ol>
+          </article>`;
+        }).join("")}</div>`;
+      }
+      return `<section class="section"><div class="section-head"><h2>Rookie draft</h2><p>${esc(note)}</p></div>${body}</section>`;
+    }
+
+    function movesHtml() {
+      const moves = result.moves;
+      const note = `Each add is paired with your weakest player who can go without leaving a position short of starters. A swap has to be a clear dynasty upgrade, about 12 or more ranking spots, before it's listed. Moves are planned in order, so later ones account for earlier ones.${result.me.locked ? ` ${result.me.locked} locked player${result.me.locked > 1 ? "s are" : " is"} never dropped.` : ""}`;
+      let body;
+      if (!moves.length) {
+        const best = result.waivers[0];
+        body = `<div class="empty">No clear upgrades on the wire right now. Your weakest active players are close to or better than the best available${best ? `, ${esc(best.name)} (${rankText(best)})` : ""}. Check back after the rookie draft and as rankings change.</div>`;
+      } else {
+        body = moves.map((m, i) => {
+          const add = m.add, drop = m.drop;
+          const why = [];
+          if (m.fills.length) why.push(`<span class="tag fit">Helps ${m.fills.join("/")} depth</span>`);
+          why.push(m.starts ? '<span class="tag fit">Would start</span>' : '<span class="tag">Bench depth</span>');
+          if (drop) why.push(`<span>${add.rank && drop.rank ? `${drop.rank - add.rank} spots higher in the rankings` : "Replaces an unranked player"}</span>`);
+          else why.push("<span>Fills an open roster spot</span>");
+          if (pointsLeague && add.fpg != null && drop && drop.fpg != null) why.push(`<span>${(add.fpg - drop.fpg >= 0 ? "+" : "") + (add.fpg - drop.fpg).toFixed(1)} FP/G last season</span>`);
+          return `<article class="move">
+            <div class="step">${i + 1}</div>
+            <div class="side"><span class="verb add">Add</span><span class="nm">${esc(add.name)}</span>
+              <span class="meta">${posChips(add.groups)} ${esc(add.team)} · ${rankText(add)} · ${ageFmt(add.age)} yrs ${moveTag(add.move)} ${injTag(add)} ${hotTag(add)}</span></div>
+            <div class="arrow" aria-hidden="true">⇄</div>
+            <div class="side drop"><span class="verb drop">${drop ? "Drop" : "Roster spot"}</span><span class="nm">${drop ? esc(drop.name) : "Open"}</span>
+              <span class="meta">${drop ? `${posChips(drop.groups)} ${esc(drop.team)} · ${rankText(drop)} · ${ageFmt(drop.age)} yrs ${injTag(drop)}` : "No drop needed"}</span>
+              ${drop ? lockBtn(drop) : ""}</div>
+            <div class="why">${why.join("")}</div>
+          </article>`;
+        }).join("");
+      }
+      return `<section class="section"><div class="section-head"><h2>Recommended moves</h2><p>${esc(note)}</p></div><div class="moves">${body}</div></section>`;
+    }
+
+    function playerRows() {
+      const me = result.me;
+      const r = ctx.data.rosters.find((x) => String(x.roster_id) === String(me.rosterId)) || {};
+      const taxi = new Set((r.taxi || []).map(String));
+      const mine = [
+        ...me.active.map((p) => ({ p, mine: true, slot: p.id in me.lineup ? me.lineup[p.id] : "BN" })),
+        ...me.reserve.map((p) => ({ p, mine: true, slot: taxi.has(String(p.id)) ? "TX" : "IR" })),
+      ];
+      const wire = result.waivers.map((p) => ({ p, mine: false, slot: "FA" }));
+      const q = view.wireQuery.trim().toLowerCase();
+      const rows = mine.concat(wire).filter(({ p }) =>
+        (view.wirePos === "all" || p.groups.includes(view.wirePos)) &&
+        (!q || p.name.toLowerCase().includes(q) || (p.team || "").toLowerCase().includes(q)));
+      const byRank = (a, b) => (a.rank ?? 9999) - (b.rank ?? 9999);
+      const by = {
+        fit: (a, b) => (b.fit || 0) - (a.fit || 0) || byRank(a, b),
+        rank: byRank,
+        fpg: (a, b) => (b.fpg ?? -1) - (a.fpg ?? -1) || byRank(a, b),
+        age: (a, b) => (a.age ?? 99) - (b.age ?? 99) || byRank(a, b),
+      }[view.wireSort];
+      rows.sort((x, y) => by(x.p, y.p));
+      return rows.filter((x) => view.wireShow === "both" || (view.wireShow === "mine") === x.mine);
+    }
+
+    function playersTable() {
+      const rows = playerRows();
+      const maxFit = Math.max(...rows.map((x) => x.p.fit || 0), 1);
+      let count = view.wireShown;
+      if (count == null) {
+        let last = -1;
+        rows.forEach((x, i) => { if (x.mine) last = i; });
+        count = Math.min(AUTO_MAX, Math.max(PAGE, last + 6));
+      }
+      const shown = rows.slice(0, count);
+      const body = shown.map(({ p, mine, slot }) => {
+        const last = mine
+          ? (slot === "IR" || slot === "TX" ? '<span class="muted small">Never dropped</span>' : lockBtn(p))
+          : p.drop === "open" ? '<span class="muted">Open spot</span>'
+          : p.drop ? `Drop ${esc(result.info[p.drop].name)} <span class="muted">${rankText(result.info[p.drop])}</span>`
+          : '<span class="muted">Not an upgrade</span>';
+        const boost = !mine && p.needGroup && result.needs[p.needGroup] >= 0.15 ? ` <span class="tag fit">${p.needGroup} need</span>` : "";
+        const fit = p.fit || 0;
+        return `<tr class="${mine ? "mine" : ""}">
+          <td class="slot">${mine ? esc(slot) : '<span class="muted">FA</span>'}</td>
+          <td class="num">${p.rank ? `<span class="rank">${p.rank}</span>` : '<span class="muted">UR</span>'}</td>
+          <td>${nameCell(p)}</td><td>${posChips(p.groups)}</td>
+          <td class="num">${ageFmt(p.age)}</td><td class="num">${fmt1(p.fpg)}</td>
+          <td style="white-space:nowrap"><span class="fitbar"><i style="width:${(fit / maxFit * 100).toFixed(0)}%"></i></span>${fit.toFixed(0)}${boost}</td>
+          <td>${last}</td>
+        </tr>${view.open.has(p.id) ? detailRow(p, 8) : ""}`;
+      }).join("") || '<tr><td colspan="8" class="muted">No players match.</td></tr>';
+      const rest = rows.length - shown.length;
+      return `<div class="table-wrap"><table>
+          <thead><tr><th>Slot</th><th class="num">Rank</th><th>Player</th><th>Pos</th><th class="num">Age</th>
+            <th class="num" title="Last season's per-game stats scored with this league's settings">FP/G</th><th>Fit</th><th>Suggested drop / keep</th></tr></thead>
+          <tbody>${body}</tbody></table></div>
+        ${rest > 0 ? `<button type="button" class="more" data-more="${shown.length}">Show ${Math.min(PAGE, rest)} more of ${rest}</button>` : ""}`;
+    }
+
+    function playersTab() {
+      const um = result.unmatched;
+      const sort = [["rank", "Dynasty rank"], ["fit", "Best fit for my roster"], ["fpg", "Fantasy pts per game"], ["age", "Youngest first"]];
+      return `<section class="section">
+        <div class="section-head"><h2>Players</h2>
+          <p>Your roster and the waiver wire in one list, so you can see where each free agent would slot in. <span class="mine-key">Your players</span> are highlighted, with their slot in the best lineup by dynasty value (your lineup in Sleeper may differ). Fit is dynasty value boosted at positions where you're thin.</p></div>
+        <div class="toolbar">
+          <div class="seg" role="group" aria-label="Position filter">${[["all", "All"], ["G", "G"], ["F", "F"], ["C", "C"]].map(([v, l]) => `<button type="button" data-pos="${v}" aria-pressed="${view.wirePos === v}">${l}</button>`).join("")}</div>
+          <div class="seg" role="group" aria-label="Whose players">${[["both", "Both"], ["wire", "Wire"], ["mine", "Mine"]].map(([v, l]) => `<button type="button" data-show="${v}" aria-pressed="${view.wireShow === v}">${l}</button>`).join("")}</div>
+          <label class="small muted" for="sort-${esc(ctx.id)}">Sort</label>
+          <select id="sort-${esc(ctx.id)}" data-sort>${sort.map(([v, l]) => `<option value="${v}"${view.wireSort === v ? " selected" : ""}>${l}</option>`).join("")}</select>
+          <input type="search" data-search placeholder="Search players" aria-label="Search players" value="${esc(view.wireQuery)}">
+        </div>
+        <div data-r="players" class="section">${playersTable()}</div>
+      </section>
+      <footer>
+        <p><strong>How it works.</strong> Players are matched between Sleeper and the <a href="https://hashtagbasketball.com/fantasy-basketball-dynasty-rankings" target="_blank" rel="noopener">Hashtag Basketball dynasty rankings</a> by name and team. Position eligibility comes from Sleeper (PG/SG count as G, SF/PF as F). Rank is turned into a value that drops off steeply, so #10 is worth far more than #60, while #200 and #260 are close. Need at a position comes from how your starters compare with the league average and how deep you are there. Players outside the top 400 count as unranked.${pointsLeague ? "" : " This league uses category scoring, so the FP/G column is left blank."}</p>
+        <p><strong>Refreshing data.</strong> Your league loads live from Sleeper every time you open it. A scheduled GitHub Action pulls the Hashtag Basketball rankings once a day.</p>
+        <p>${um.length ? `Not matched to a Sleeper player: ${esc(um.map((p) => p.name).join(", "))}.` : "Every ranked player was matched to a Sleeper player."}</p>
+      </footer>`;
+    }
+
+    const tabBody = () => (ctx.tab === "players" ? playersTab() : `${positionsHtml()}${draftHtml()}${movesHtml()}`);
+    el.innerHTML = `${headHtml()}${summaryHtml()}${DH.subtabs(ctx, TABS)}<div class="stack">${tabBody()}</div>`;
+    const redrawPlayers = () => { const r = el.querySelector('[data-r="players"]'); if (r) r.innerHTML = playersTable(); };
+
+    el.onchange = (e) => {
+      const t = e.target;
+      if (t.matches("[data-team]")) return ctx.setTeam(t.value);
+      if (t.matches("[data-sort]")) { view.wireSort = t.value; view.wireShown = null; return redrawPlayers(); }
+    };
+    el.oninput = (e) => {
+      if (e.target.matches("[data-search]")) { view.wireQuery = e.target.value; view.wireShown = null; redrawPlayers(); }
+    };
+    el.onclick = (e) => {
+      const b = e.target.closest("button");
+      if (!b || !el.contains(b)) return;
+      if (b.dataset.lock) {
+        const id = b.dataset.lock;
+        locked.has(id) ? locked.delete(id) : locked.add(id);
+        ctx.store.set("locked", [...locked]);
+        ctx.rerender();
+        return DH.refocus(`button[data-lock="${CSS.escape(id)}"]`);
+      }
+      if (b.dataset.open) {
+        view.open.has(b.dataset.open) ? view.open.delete(b.dataset.open) : view.open.add(b.dataset.open);
+        redrawPlayers();
+        return DH.refocus(`button[data-open="${CSS.escape(b.dataset.open)}"]`);
+      }
+      if (b.dataset.pos) {
+        view.wirePos = b.dataset.pos; view.wireShown = null;
+        for (const x of el.querySelectorAll("button[data-pos]")) x.setAttribute("aria-pressed", String(x === b));
+        return redrawPlayers();
+      }
+      if (b.dataset.show) {
+        view.wireShow = b.dataset.show; view.wireShown = null;
+        for (const x of el.querySelectorAll("button[data-show]")) x.setAttribute("aria-pressed", String(x === b));
+        return redrawPlayers();
+      }
+      if (b.dataset.more) { view.wireShown = Number(b.dataset.more) + PAGE; return redrawPlayers(); }
+    };
+  }
+
+  DH.sports.nba = {
+    id: "nba", label: "Basketball", short: "NBA",
+    playersGlobal: "SLEEPER_PLAYERS_NBA",
+    files: () => ["data/nba/players.js", "data/nba/rankings.js", "nba/analysis.js"],
+    tabs: TABS,
+    render,
+  };
+})();

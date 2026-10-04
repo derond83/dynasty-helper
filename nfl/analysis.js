@@ -1,6 +1,7 @@
-// Roster + waiver analysis for a Sleeper dynasty football league with IDP.
-// Offense is valued by KeepTradeCut or Dynasty Daddy; IDP by a production model
-// scored with the league's own settings and cross-checked against FantasyPros.
+// Roster + waiver analysis for a Sleeper dynasty football league (IDP optional).
+// Offense is valued by KeepTradeCut or Dynasty Daddy in the league's format (1QB or
+// superflex, KTC's TE-premium level); IDP by a production model scored with the
+// league's own settings and cross-checked against FantasyPros.
 // Pure functions; no DOM.
 (function (root) {
   "use strict";
@@ -18,15 +19,15 @@
   const DEFAULTS = {
     source: "ktc",      // offensive values: "ktc" or "dd"
     winNow: 0,          // 0 = pure dynasty, 1 = this season only
-    idpSpots: 6,        // active roster spots reserved for IDP; the rest are offense
+    idpSpots: null,     // active roster spots reserved for IDP (null = IDP starters + 2); the rest are offense
     bigPlayWeight: 0.35, // share of a player's own INT/FF/FR/TD/safety/block points that counts; the rest is position average
     fpWeight: 0.3,      // pull of FantasyPros dynasty rankings on IDP value
     multiBonus: 0.05,   // boost for DL/LB or LB/DB eligibility
     minGain: 0.12,      // a swap must add this share of value
   };
 
-  // Fewest players to keep at each position: one cover beyond the dedicated slots.
-  const MIN_DEPTH = { QB: 2, RB: 3, WR: 3, TE: 2, DL: 2, LB: 2, DB: 2 };
+  // Slots nothing here values; reported, and left out of lineups.
+  const UNVALUED_SLOTS = { K: "kickers", DEF: "team defenses" };
   // Smallest swap worth suggesting, in each value's own units.
   const MIN_ABS_GAIN = { off: 150, idp: 0.5 };
   // How much positional need lifts a candidate when ordering moves.
@@ -50,7 +51,39 @@
     const fp = (p && p.fantasy_positions) || [];
     return GROUPS.filter((g) => fp.includes(g));
   }
-  const domainOf = (groups) => (groups.some((g) => OFFENSE.includes(g)) ? "off" : groups.length ? "idp" : null);
+  const domainOf = (groups, hasIdp) =>
+    (groups.some((g) => OFFENSE.includes(g)) ? "off" : groups.length && hasIdp ? "idp" : null);
+
+  /**
+   * Which value table fits the league: superflex if a SUPER_FLEX slot or 2+ QB slots,
+   * and KeepTradeCut's TE-premium tier from its own guidance (TE slots, TE reception bonus).
+   */
+  function leagueFormat(league) {
+    const rp = league.roster_positions || [];
+    const n = (slot) => rp.filter((s) => s === slot).length;
+    const sf = n("SUPER_FLEX") > 0 || n("QB") >= 2;
+    const bonus = Number((league.scoring_settings || {}).bonus_rec_te) || 0;
+    const tes = n("TE");
+    let tep = null;
+    if (tes >= 2 && bonus > 0) tep = "teppp";
+    else if (tes >= 2 || bonus > 1) tep = "tepp";
+    else if (bonus >= 0.5) tep = "tep";
+    const base = sf ? "sf" : "1qb";
+    const label = (sf ? "Superflex" : "1QB") + (tep ? ` · TE${"+".repeat(tep.length - 2)}` : "");
+    return { base, tep, key: tep ? `${base}_${tep}` : base, label };
+  }
+
+  // Fewest players to keep at each position: its dedicated starting slots (superflex counts
+  // toward QB) plus one to cover byes and injuries. Positions with no dedicated slot need none.
+  function minDepth(slots) {
+    const n = (slot) => slots.filter((s) => s === slot).length;
+    const out = {};
+    for (const g of GROUPS) {
+      const dedicated = n(g) + (g === "QB" ? n("SUPER_FLEX") : 0);
+      out[g] = dedicated ? dedicated + 1 : 0;
+    }
+    return out;
+  }
 
   // ---------- IDP model ----------
 
@@ -259,17 +292,29 @@
     const offSlots = slots.filter((s) => SLOT_ELIGIBLE[s].some((g) => OFFENSE.includes(g)));
     const idpSlots = slots.filter((s) => SLOT_ELIGIBLE[s].every((g) => IDP.includes(g)));
     const maxActive = rp.filter((s) => s !== "IR" && s !== "TAXI").length;
+    const hasIdp = idpSlots.length > 0;
+    const MIN_DEPTH = minDepth(slots);
+    // IDP spots default to the IDP starters plus two backups; none without IDP.
+    cfg.idpSpots = hasIdp ? (cfg.idpSpots == null ? idpSlots.length + 2 : Number(cfg.idpSpots)) : 0;
+    const format = leagueFormat(league);
+    const unvalued = [...new Set(rp.filter((s) => UNVALUED_SLOTS[s]))].map((s) => UNVALUED_SLOTS[s]);
 
     const sources = values.sources || {};
     const src = sources[cfg.source] || sources.ktc || Object.values(sources)[0] || {};
     const other = Object.entries(sources).find(([k]) => k !== cfg.source);
+    // The league's format: 1QB or superflex table, with the TE-premium tier on top when the
+    // source has one (Dynasty Daddy doesn't; its base values are used).
+    const table = (s, kind, key) => ((s[kind] || {})[key]) || null;
     const offValue = (pid, s) => {
-      const d = ((s.dynasty || {})[pid] || [0, 0]);
-      const r = ((s.redraft || {})[pid] || [0, 0]);
-      return { value: (1 - cfg.winNow) * d[0] + cfg.winNow * r[0], dynasty: d[0], redraft: r[0], trend: d[1] };
+      const base = (table(s, "dynasty", format.base) || {})[pid] || [0, 0];
+      const tep = format.tep ? table(s, "dynasty", format.key) : null;
+      const dyn = tep && tep[pid] != null ? tep[pid] : base[0];
+      const r = (table(s, "redraft", format.base) || {})[pid] || [0, 0];
+      return { value: (1 - cfg.winNow) * dyn + cfg.winNow * r[0], dynasty: dyn, redraft: r[0], trend: base[1] };
     };
+    const hasTep = (s) => !format.tep || !!table(s, "dynasty", format.key);
 
-    const idpVals = idpModel(idpData, players, scoring, season, cfg);
+    const idpVals = hasIdp && idpData ? idpModel(idpData, players, scoring, season, cfg) : { players: {}, repl: {} };
     const trending = new Map((data.trending || []).map((t) => [String(t.player_id), t.count]));
 
     const info = {};
@@ -277,7 +322,7 @@
       if (info[id]) return info[id];
       const p = players[id] || {};
       const all = groupsOf(p);
-      const domain = domainOf(all);
+      const domain = domainOf(all, hasIdp);
       // Two-way players (WR/DB) are valued, and slotted, on one side only.
       const groups = all.filter((g) => (domain === "off" ? OFFENSE : IDP).includes(g));
       const base = {
@@ -408,7 +453,7 @@
     const idpRank = teams.map((t) => t.idpValue).filter((v) => v > me.idpValue + 1e-9).length + 1;
 
     const myNeeds = needsFor(me.active);
-    const positions = GROUPS.map((g) => {
+    const positions = GROUPS.filter((g) => hasIdp || OFFENSE.includes(g)).map((g) => {
       const L = leagueG[g];
       const mine = me.active.filter((id) => info[id].groups.includes(g)).sort((a, b) => info[b].value - info[a].value);
       return {
@@ -440,6 +485,7 @@
         if (Object.keys(s).some((k) => s[k] > before[k])) continue; // creates a shortfall
         const fixes = shortTotal(before) - shortTotal(s);
         const drop = dropId ? info[dropId] : null;
+        if (drop && !drop.domain) continue; // kickers / team defenses: nothing values them
         let kind;
         if (!drop) kind = "open";
         else if (fixes > 0) kind = "balance";                  // fixes a position or the IDP/offense split
@@ -505,7 +551,8 @@
     })).sort((a, b) => b.value - a.value);
 
     return {
-      cfg, season, slots, offSlots, idpSlots, maxActive, scale, startersPer,
+      cfg, season, slots, offSlots, idpSlots, maxActive, scale, startersPer, hasIdp, unvalued, minDepth: MIN_DEPTH,
+      format: { ...format, tepMissing: !hasTep(src) },
       source: { key: cfg.source in sources ? cfg.source : Object.keys(sources)[0], label: src.label, via: src.via, updated: src.updated },
       compareLabel: other ? other[1].label : null,
       me: {
@@ -522,7 +569,7 @@
     };
   }
 
-  const api = { analyze, idpModel, bestLineup, ageFactor, norm, DEFAULTS, GROUPS, OFFENSE, IDP, MIN_DEPTH };
+  const api = { analyze, idpModel, bestLineup, ageFactor, norm, leagueFormat, minDepth, DEFAULTS, GROUPS, OFFENSE, IDP };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.DynastyAnalysis = api;
 })(typeof window !== "undefined" ? window : globalThis);
