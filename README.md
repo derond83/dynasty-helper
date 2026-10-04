@@ -1,6 +1,6 @@
-# Dynasty Helper
+# Front Office
 
-Waiver-wire and roster advice for Sleeper **dynasty** leagues, football and basketball, in one app:
+Front Office gives waiver, trade, lineup and rookie-draft advice for Sleeper **dynasty** leagues, football and basketball, in one app:
 `https://derond83.github.io/dynasty-helper/`
 
 - **Football** offense is valued by [KeepTradeCut](https://keeptradecut.com/dynasty-rankings) or
@@ -52,11 +52,23 @@ on Cloudflare's free tier.
 `dynasty-helper` (creating it if missing), deploys to `https://dynasty-helper-sync.deron-dantzler.workers.dev`, and checks
 `/health`. The Worker accepts requests only from `https://derond83.github.io` and localhost.
 
+## Feedback, help and installing
+
+- **Send feedback** (footer, and the How it works page) opens a short form. Messages go to the sync Worker, which keeps
+  them in the same KV namespace under keys starting `fb:` (at most 40 a day, so a flood can't use up the free tier's
+  writes). Read them in the Cloudflare dashboard: **Storage & Databases → Workers KV → dynasty-helper → KV Pairs**.
+- **How it works** (`#/how`) explains the app in plain language for leaguemates. A one-time tip on the first league
+  page points to Settings and How it works.
+- **Add to Home Screen** installs it like an app: `manifest.webmanifest` and `icons/` give it a name, the FO icon and a
+  full-screen window.
+
 ## Files
 
 | Path | What it is |
 | --- | --- |
 | `index.html`, `styles.css` | The app shell and styles. |
+| `manifest.webmanifest`, `icons/` | Home-screen install: app name and icons (`icon.svg` is the source). |
+| `js/how.js`, `js/feedback.js` | The How it works page; the feedback form. |
 | `js/app.js` | League list, navigation, the Leagues page, loading a league. |
 | `js/common.js`, `js/sleeper.js` | Shared helpers and storage; Sleeper API calls. |
 | `js/sync.js` | Settings sync with the Worker. |

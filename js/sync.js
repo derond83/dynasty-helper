@@ -149,6 +149,7 @@
     /** Delete the saved copy everywhere and stop syncing here. */
     async erase() { if (key()) await request("DELETE"); this.stop(); },
 
+    serviceUrl: () => url(),
     validKey: (k) => /^[A-Za-z0-9_-]{32,64}$/.test(k || ""),
   };
 })(window);

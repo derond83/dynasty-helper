@@ -5,7 +5,17 @@
 <!-- __VERSION__ is replaced with the commit at deploy time, so each deploy gets fresh file addresses past browser caches. -->
 <meta name="app-version" content="__VERSION__">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Dynasty Helper</title>
+<title>Front Office</title>
+<meta name="description" content="Waiver, trade, lineup and rookie-draft advice for Sleeper dynasty football and basketball leagues.">
+<meta name="theme-color" content="#15202b">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="icon" href="icons/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Front Office">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Barlow:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="styles.css?v=__VERSION__">
@@ -14,13 +24,20 @@
 <a class="skip" href="#main">Skip to content</a>
 <header class="appbar">
   <div class="appbar-row">
-    <a class="wordmark" href="#/">Dynasty Helper</a>
-    <a class="manage" id="manage-link" href="#/leagues">Leagues</a>
+    <a class="wordmark" href="#/"><img src="icons/icon.svg" alt="" width="26" height="26"><span>Front Office</span></a>
+    <nav class="appbar-links" aria-label="App">
+      <a class="manage" id="how-link" href="#/how">How it works</a>
+      <a class="manage" id="manage-link" href="#/leagues">Leagues</a>
+    </nav>
   </div>
   <nav class="league-tabs" id="league-tabs" aria-label="Your leagues"></nav>
 </header>
 <main id="main" class="wrap" tabindex="-1"></main>
-<noscript><p class="wrap">Dynasty Helper needs JavaScript.</p></noscript>
+<footer class="site-foot wrap">
+  <p><strong>Front Office</strong> · <a href="#/how">How it works</a> · <button type="button" class="linklike" data-feedback>Send feedback</button></p>
+  <p>Data: <a href="https://sleeper.com" target="_blank" rel="noopener">Sleeper</a> (leagues, players, projections), <a href="https://keeptradecut.com" target="_blank" rel="noopener">KeepTradeCut</a> and <a href="https://dynasty-daddy.com" target="_blank" rel="noopener">Dynasty Daddy</a> (football values), <a href="https://www.fantasypros.com" target="_blank" rel="noopener">FantasyPros</a> (IDP rankings), <a href="https://hashtagbasketball.com" target="_blank" rel="noopener">Hashtag Basketball</a> (basketball rankings and keeper values). Front Office is an independent, free fan project and isn't affiliated with or endorsed by any of them.</p>
+</footer>
+<noscript><p class="wrap">Front Office needs JavaScript.</p></noscript>
 
 <script src="js/common.js?v=__VERSION__"></script>
 <script src="js/sync.js?v=__VERSION__"></script>
@@ -31,6 +48,8 @@
 <script src="data/home.js?v=__VERSION__"></script>
 <script src="nfl/view.js?v=__VERSION__"></script>
 <script src="nba/view.js?v=__VERSION__"></script>
+<script src="js/feedback.js?v=__VERSION__"></script>
+<script src="js/how.js?v=__VERSION__"></script>
 <script src="js/app.js?v=__VERSION__"></script>
 </body>
 </html>

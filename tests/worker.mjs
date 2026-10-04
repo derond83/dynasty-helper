@@ -29,5 +29,14 @@ ok((await call("PATCH", { set: { "dh.x": 5 } })).status === 400, "non-string val
 ok((await call("PATCH", { set: { "dh.x": "y".repeat(40000) } })).status === 400, "oversized value refused");
 ok(!(await call("GET", null, { origin: "https://evil.example" })).headers.get("Access-Control-Allow-Origin"), "other origins get no CORS");
 ok((await call("DELETE")).status === 204 && (await call("GET")).status === 404, "delete removes everything");
+const fb = (body, origin = "https://derond83.github.io") => worker.fetch(new Request("https://x.workers.dev/v1/feedback", {
+  method: "POST", headers: { Origin: origin, "Content-Type": "application/json" }, body: JSON.stringify(body) }), env);
+ok((await fb({ message: "Love it", from: "Sam", context: { page: "#/1/team" } })).status === 204, "feedback is saved");
+const fbKey = [...store.keys()].find((k) => k.startsWith("fb:"));
+ok(fbKey && JSON.parse(store.get(fbKey)).message === "Love it", "feedback stored under fb:");
+ok((await fb({ message: "  " })).status === 400, "empty feedback refused");
+ok((await fb({ message: "hi" }, "https://evil.example")).status === 403, "feedback from other sites refused");
+for (let i = 0; i < 45; i++) await fb({ message: "spam " + i });
+ok([...store.keys()].filter((k) => k.startsWith("fb:")).length === 40, "feedback capped per day");
 console.log(failed ? `\n${failed} failed` : "\nall passed");
 process.exit(failed ? 1 : 0);

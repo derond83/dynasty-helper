@@ -364,3 +364,37 @@ button.info .icon { vertical-align: 0; }
 .sync-status { margin: 0; font-weight: 600; }
 .more.danger { color: var(--bad); border-color: currentColor; }
 .about p { margin: 0; max-width: 85ch; }
+/* Brand, app links, footer */
+.appbar { padding-top: env(safe-area-inset-top); }
+.wordmark { display: inline-flex; align-items: center; gap: 8px; }
+.wordmark img { display: block; border-radius: 6px; }
+.appbar-links { display: flex; gap: 2px; }
+@media (max-width: 420px) { #how-link { display: none; } }
+.site-foot { margin-top: 40px; padding-top: 16px; padding-bottom: calc(24px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); color: var(--muted); font-size: .82rem; display: grid; gap: 6px; }
+.site-foot p { margin: 0; max-width: 95ch; }
+.site-foot a { color: inherit; }
+button.linklike { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); text-decoration: underline; cursor: pointer; }
+.site-foot button.linklike { color: inherit; }
+
+/* Feedback dialog */
+dialog.feedback { width: min(520px, calc(100vw - 32px)); border: 1px solid var(--line); border-radius: var(--r); padding: 20px; background: var(--surface); color: var(--ink); box-shadow: 0 12px 40px rgba(0, 0, 0, .3); }
+dialog.feedback::backdrop { background: rgba(10, 15, 20, .55); }
+dialog.feedback form { display: grid; gap: 12px; }
+dialog.feedback h2 { margin: 0; }
+dialog.feedback p { margin: 0; }
+dialog.feedback .field > span { font-size: .74rem; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+dialog.feedback .field > span .muted { text-transform: none; letter-spacing: 0; font-weight: 400; }
+dialog.feedback textarea, dialog.feedback input[type="text"] { background: var(--sunk); color: var(--ink); border: 1px solid var(--line); border-radius: var(--r); padding: 8px 10px; font: inherit; width: 100%; }
+dialog.feedback textarea { resize: vertical; min-height: 120px; }
+.check { display: flex; gap: 8px; align-items: center; font-size: .9rem; }
+
+/* How it works */
+.how-page .lead { margin: 0; font-size: 1.05rem; max-width: 75ch; }
+.how-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 16px; align-items: start; }
+.how-card h2 { margin: 0; }
+.how-card p, .how-card ul { margin: 0; }
+.how-card ul { padding-left: 20px; display: grid; gap: 4px; }
+
+/* One-time tip */
+.banner.tip { background: var(--mine-bg); border-color: var(--mine); justify-content: space-between; }
+.banner.tip .more { min-height: 32px; padding: 4px 12px; }

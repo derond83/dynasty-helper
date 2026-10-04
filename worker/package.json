@@ -2,5 +2,5 @@
   "name": "dynasty-helper-sync",
   "private": true,
   "type": "module",
-  "description": "Settings sync for Dynasty Helper: a Cloudflare Worker over Workers KV."
+  "description": "Settings sync for Front Office: a Cloudflare Worker over Workers KV."
 }

@@ -89,6 +89,7 @@
   function route() {
     const h = location.hash.replace(/^#\/?/, "");
     if (h === "leagues") return { page: "leagues" };
+    if (h === "how") return { page: "how" };
     const sync = h.match(/^sync\/([A-Za-z0-9_-]+)$/);
     if (sync) return { page: "sync", key: sync[1] };
     const [id, tab] = h.split("/");
@@ -105,8 +106,9 @@
         <span class="ltab-text"><span class="lname">${esc(l.name)}</span>${team ? `<span class="lteam">${esc(team)}</span>` : ""}</span></a>`;
     }).join("");
     $("#league-tabs").innerHTML = tabs + `<a class="ltab add" href="#/leagues"${activeId === "leagues" ? ' aria-current="page"' : ""}><span aria-hidden="true">＋</span> Add league</a>`;
-    if (activeId === "leagues") $("#manage-link").setAttribute("aria-current", "page");
-    else $("#manage-link").removeAttribute("aria-current");
+    for (const [id, page] of [["#manage-link", "leagues"], ["#how-link", "how"]]) {
+      if (activeId === page) $(id).setAttribute("aria-current", "page"); else $(id).removeAttribute("aria-current");
+    }
     const cur = $("#league-tabs [aria-current]");
     if (cur) cur.scrollIntoView({ block: "nearest", inline: "nearest" });
   }
@@ -130,7 +132,7 @@
     if (tab && tab !== tabId) history.replaceState(null, "", `#/${entry.id}/${tabId}`);
     DH.store.set("last", entry.id);
     DH.store.league(entry.id).set("tab", tabId);
-    document.title = `${entry.name} · Dynasty Helper`;
+    document.title = `${entry.name} · Front Office`;
     drawNav(entry.id);
     const main = $("#main");
     main.innerHTML = `${noticeHtml()}<div class="loading" role="status"><span class="sport-badge" data-sport="${esc(entry.sport)}">${esc(sport.short)}</span> Loading ${esc(entry.name)}…</div>`;
@@ -211,7 +213,7 @@
 
   function leaguesPage() {
     ++current;
-    document.title = "Leagues · Dynasty Helper";
+    document.title = "Leagues · Front Office";
     drawNav("leagues");
     const u = user();
     const list = leagueList();
@@ -235,14 +237,15 @@
     } else if (u) foundHtml = '<p class="muted" role="status">Looking up your leagues…</p>';
 
     const welcome = !list.length ? `<section class="card section welcome">
-        <h2>Welcome to Dynasty Helper</h2>
+        <h2>Welcome to Front Office</h2>
         <p>Waiver, trade, lineup and rookie-draft advice for your <strong>Sleeper dynasty</strong> football and basketball leagues, using KeepTradeCut, Dynasty Daddy, Hashtag Basketball and Sleeper's projections, scored with your league's own settings.</p>
+        <p class="small"><a href="#/how">How it works</a> explains where the numbers come from.</p>
         <ol class="steps"><li>Enter your Sleeper username below.</li><li>Add your dynasty leagues with one click.</li><li>Open a league. It starts on your team.</li></ol>
         <p class="small muted">Already use it on another device? Open your <strong>sync link</strong> from that device's Leagues page here, and your leagues and settings come with it.</p>
       </section>` : "";
 
     $("#main").innerHTML = `${noticeHtml()}<div class="stack leagues-page">
-      <header class="top"><div class="brand"><span class="eyebrow">Dynasty Helper</span><h1>Leagues</h1></div></header>
+      <header class="top"><div class="brand"><span class="eyebrow">Front Office</span><h1>Leagues</h1></div></header>
       ${welcome}
       <section class="card section">
         <div class="section-head"><h2>Your Sleeper account</h2>
@@ -327,12 +330,12 @@
   // Opening a sync link: confirm, then bring that device's settings here.
   function syncPage(k) {
     ++current;
-    document.title = "Sync · Dynasty Helper";
+    document.title = "Sync · Front Office";
     drawNav(null);
     const have = leagueList().length;
     const same = DH.sync.enabled() && DH.sync.link() && DH.sync.link().endsWith(`/sync/${k}`);
     $("#main").innerHTML = `<div class="stack leagues-page">
-      <header class="top"><div class="brand"><span class="eyebrow">Dynasty Helper</span><h1>Sync this device</h1></div></header>
+      <header class="top"><div class="brand"><span class="eyebrow">Front Office</span><h1>Sync this device</h1></div></header>
       <section class="card section">
         ${!DH.sync.validKey(k) ? `<p>That sync link isn't complete. Copy it again from the other device's Leagues page.</p><p><a href="#/leagues">Go to Leagues</a></p>`
         : same ? `<p>This browser already uses this sync link.</p><p><a href="#/">Open the app</a></p>`
@@ -429,7 +432,7 @@
       catch (err) { prompt("Copy your sync link:", DH.sync.link()); }
     }
     if (b.hasAttribute("data-sync-share")) {
-      try { await navigator.share({ title: "Dynasty Helper sync link", url: DH.sync.link() }); } catch (err) { /* cancelled */ }
+      try { await navigator.share({ title: "Front Office sync link", url: DH.sync.link() }); } catch (err) { /* cancelled */ }
     }
     if (b.hasAttribute("data-sync-on")) { DH.sync.resume(); redrawSync(); }
     if (b.hasAttribute("data-sync-stop")) { DH.sync.stop(); redrawSync(); }
@@ -443,6 +446,14 @@
   function render() {
     const r = route();
     if (r.page === "sync") return syncPage(r.key);
+    if (r.page === "how") {
+      ++current;
+      document.title = "How it works · Front Office";
+      drawNav("how");
+      $("#main").innerHTML = DH.howHtml();
+      window.scrollTo(0, 0);
+      return;
+    }
     if (r.page === "leagues") {
       leaguesPage();
       if (user() && !found) loadFound().then(() => { if (route().page === "leagues") leaguesPage(); });

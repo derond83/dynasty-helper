@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Refresh the data bundled with Dynasty Helper.
+"""Refresh the data bundled with Front Office.
 
   python3 refresh_data.py                 # everything
   python3 refresh_data.py --sport nfl     # one sport's rankings/values only (plus league snapshots)
