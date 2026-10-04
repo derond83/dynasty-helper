@@ -141,16 +141,16 @@ Sleeper's projected stats for the week are scored with the league's own settings
 basketball categories count exactly as the league scores them). Out, IR and suspended players count 0, Doubtful 25%,
 Questionable 85%; football players on bye count 0. A basketball player's week is the sum of his games.
 
-- **Best lineup**: the highest projected total that fits the league's slots (exact search), compared with the lineup set
-  in Sleeper, listed as "Start X over Y (+points)".
-- **Opponent**: this week's opponent from Sleeper's matchups, their best lineup, and their current Sleeper lineup.
-- **Win chance**: the difference in best-lineup totals against the combined spread of both lineups (each player's
-  weekly spread grows with his projection), assuming both teams start their best.
-- **Bench**: every active player outside your best lineup, by projection, with his opponent (football) or game count
-  (basketball), injury or bye status, the slots he can fill, and how far he is behind the weakest starter he could
-  replace. The opponent's bench is listed the same way, collapsed underneath.
-- **What decides it**: slots where you're ahead or behind, problems in the opponent's set lineup, your questionable
-  starters, and toss-ups between a starter and a bench player.
+- **Optimal / Current** toggle (remembered per league): the scoreboard and lineup table show either each team's best
+  lineup by projection (exact search over the league's slots) or the lineups set in Sleeper right now.
+- **Lineup table**: slot by slot against this week's opponent (from Sleeper's matchups), then every active bench player
+  on both sides as **BN** rows, by projection. Your players are tagged **Start** (in your best lineup but not set) or
+  **Sit** (set but not in your best lineup).
+- **Win chance**: the difference in totals of the lineups shown against their combined spread (each player's weekly
+  spread grows with his projection).
+- **Lineup changes**: "Start X over Y (+points)" against the lineup set in Sleeper.
+- **Before kickoff** (basketball: before games lock): your questionable or doubtful starters, and toss-ups between a
+  starter and a bench player within a point.
 
 Projections are refreshed twice a day (6 AM and noon Eastern).
 

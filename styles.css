@@ -331,3 +331,12 @@ td.good { color: var(--good); font-weight: 600; } td.bad { color: var(--bad); fo
   .sb-side.right, .sb-mid { text-align: left; }
 }
 [data-g="K"], [data-g="DEF"] { --pc: var(--muted); }
+/* Matchup: optimal / current toggle, bench rows under the starters */
+.scoreboard > .mv { min-width: 0; display: grid; gap: 16px; }
+.scoreboard > .mv[hidden] { display: none; }
+.mv-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.mv-head h2 { margin-right: auto; }
+.mv-head p { flex-basis: 100%; }
+table.lineups tr.bench-row td { color: var(--muted); }
+table.lineups tr.bench-row td strong { font-weight: 600; }
+table.lineups tr.bench-row.first td { border-top: 2px solid var(--line); }

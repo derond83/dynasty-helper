@@ -78,7 +78,7 @@
         const id = (team.starters || [])[i];
         return id && id !== "0" ? String(id) : null;
       });
-      return { best, current, bestTotal: total(best), currentTotal: total(current), variance: sd(best) };
+      return { best, current, bestTotal: total(best), currentTotal: total(current), variance: sd(best), currentVariance: sd(current) };
     };
     const me = side(o.mine), them = side(o.theirs);
 
@@ -89,13 +89,14 @@
     const empty = me.current.filter((id) => !id).length;
     const changes = start.map((id, i) => ({ start: id, slot: o.slots[me.best.indexOf(id)], sit: sit[i] || null }));
 
-    let winProb = null;
+    // Win chance if both start their best, and if both keep the lineups set now.
+    let winProb = null, winProbCurrent = null;
     if (them) {
-      const z = (me.bestTotal - them.bestTotal) / Math.sqrt(me.variance + them.variance || 1);
-      winProb = phi(z);
+      winProb = phi((me.bestTotal - them.bestTotal) / Math.sqrt(me.variance + them.variance || 1));
+      winProbCurrent = phi((me.currentTotal - them.currentTotal) / Math.sqrt(me.currentVariance + them.currentVariance || 1));
     }
     const rows = o.slots.map((slot, i) => ({ slot, mine: me.best[i], theirs: them ? them.best[i] : null }));
-    return { me, them, changes, emptySlots: empty, winProb, rows };
+    return { me, them, changes, emptySlots: empty, winProb, winProbCurrent, rows };
   }
 
   const api = { score, optimize, matchup, AVAILABLE };
