@@ -303,3 +303,14 @@ a.more { text-decoration: none; color: var(--ink); display: inline-flex; align-i
 .settings-tab .card .knobs { padding: 0; }
 .trade .tag { white-space: normal; }
 .stack > * { min-width: 0; }
+
+/* Icons */
+.icon { flex: 0 0 auto; vertical-align: -3px; }
+.subtabs a.has-icon { gap: 6px; }
+.subtabs a.tab-settings { margin-left: auto; }
+.subtabs a.tab-settings .icon { transition: transform .3s ease; }
+.subtabs a.tab-settings:hover .icon, .subtabs a.tab-settings[aria-current] .icon { transform: rotate(45deg); }
+@media (prefers-reduced-motion: reduce) { .subtabs a.tab-settings .icon { transition: none; } }
+.settings-link { display: inline-flex; align-items: center; gap: 4px; justify-self: end; }
+.settings-link .icon { width: 14px; height: 14px; }
+@media (max-width: 640px) { .settings-link { justify-self: start; } }

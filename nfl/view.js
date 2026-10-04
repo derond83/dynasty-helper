@@ -9,7 +9,7 @@
   // Sleeper depth chart spots that usually mean a box player (tackles and sacks).
   const BOX = new Set(["SS", "NB", "MLB", "ILB", "LILB", "RILB", "WLB", "SLB", "LB"]);
   const TABS = [{ id: "moves", label: "Moves" }, { id: "trades", label: "Trades" }, { id: "players", label: "Players" },
-    { id: "league", label: "League" }, { id: "settings", label: "Settings" }];
+    { id: "league", label: "League" }, { id: "settings", label: "Settings", icon: "gear" }];
   const TRADE_KNOBS = {
     tradeTolerance: { label: "Trade fairness", min: 0.03, max: 0.25, step: 0.01, fmt: (v) => `within ${Math.round(v * 100)}%`,
       help: "How far apart the two sides' market value may be. Lower is stricter (fewer, fairer ideas); higher allows bigger asks." },

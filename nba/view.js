@@ -6,7 +6,7 @@
   const PAGE = 30;
   const AUTO_MAX = 80; // rows shown before "Show more" when reaching for your last player
   const NAMES = { G: "Guards", F: "Forwards", C: "Centers" };
-  const TABS = [{ id: "moves", label: "Moves" }, { id: "trades", label: "Trades" }, { id: "players", label: "Players" }, { id: "settings", label: "Settings" }];
+  const TABS = [{ id: "moves", label: "Moves" }, { id: "trades", label: "Trades" }, { id: "players", label: "Players" }, { id: "settings", label: "Settings", icon: "gear" }];
   const MOVE_KNOBS = {
     minGain: { label: "Minimum upgrade", min: 0, max: 0.5, step: 0.01, fmt: (v) => `${Math.round(v * 100)}%`,
       help: "A waiver swap has to add at least this much dynasty value before it's suggested (12% is about 12 ranking spots in the 100–250 range)." },
