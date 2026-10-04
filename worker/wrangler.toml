@@ -1,0 +1,10 @@
+# Deployed by .github/workflows/worker.yml, which fills in the KV namespace id by looking up the
+# namespace titled "dynasty-helper" in the Cloudflare account (and creates it if it's missing).
+name = "dynasty-helper-sync"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+workers_dev = true
+
+[[kv_namespaces]]
+binding = "KV"
+id = "__KV_NAMESPACE_ID__"

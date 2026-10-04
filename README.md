@@ -19,14 +19,38 @@ Waiver-wire and roster advice for Sleeper **dynasty** leagues, football and bask
   the season; the two take turns). **Settings** is the gear link under your team name.
 - **Settings** (per league, saved in this browser): your team, offensive values source (football), how waiver moves
   and trades are judged, trade values source (basketball), and your locked players.
-- **Leagues page** (top right, or **＋ Add league**):
+- **Leagues page** (top right, or **＋ Add league**). A first visit starts here with a short welcome.
   - *Your Sleeper account*: enter your username once. Every league then opens on your team, your leagues are listed
     for one-click adding, and leagues are followed when Sleeper starts a new season (a dynasty league gets a new id
     each season).
   - *Add by league ID*: any Sleeper league that is **dynasty** and **football or basketball**. Redraft, keeper and
     guillotine leagues, and other sports, are refused with the reason.
-- The two built-in leagues (`leagues.json`) get a daily snapshot, so they open even if Sleeper can't be reached.
-  Leagues you add load live from Sleeper.
+  - *Sync across devices*: see below.
+- Leagues load live from Sleeper in the browser every time they're opened. Leagues listed in `leagues.json` also get a
+  daily snapshot, so they open instantly and even if Sleeper can't be reached; that's only a speed-up, and any league
+  works without one.
+
+## Sync across devices
+
+Your leagues, team picks, locked players and Settings sync through a small Cloudflare Worker (`worker/`) over Workers KV,
+on Cloudflare's free tier.
+
+- Sync turns on by itself the first time you add a league or change a setting: the browser makes a random **sync key**
+  and saves one JSON document under it. KV stores the key's SHA-256, never the key.
+- To add a device, use **Copy sync link** on the Leagues page and open it on the other device (or paste it into "Have
+  a sync link"). Its settings replace that browser's. After that, changes go out about 4 seconds after your last edit
+  and come in when the app opens or returns to the foreground.
+- What stays per device: which league and tab you're on.
+- If the sync service can't be reached, everything keeps working from the browser's storage and syncs later.
+- **Stop syncing** leaves the synced copy for your other devices; **Delete the synced copy** removes it.
+- Free-tier limits (100,000 reads and 1,000 writes a day, 1 GB) are far beyond what a league's managers use. Saves are
+  batched to stay well under the write limit.
+
+**Deploying the Worker.** `.github/workflows/worker.yml` tests and deploys it on any push that changes `worker/`
+(or from **Actions → Deploy sync worker → Run workflow**). It needs two repository secrets, `CLOUDFLARE_API_TOKEN`
+(the "Edit Cloudflare Workers" token template) and `CLOUDFLARE_ACCOUNT_ID`. It looks up the KV namespace titled
+`dynasty-helper` (creating it if missing), deploys to `https://dynasty-helper-sync.deron-dantzler.workers.dev`, and checks
+`/health`. The Worker accepts requests only from `https://derond83.github.io` and localhost.
 
 ## Files
 
@@ -35,17 +59,20 @@ Waiver-wire and roster advice for Sleeper **dynasty** leagues, football and bask
 | `index.html`, `styles.css` | The app shell and styles. |
 | `js/app.js` | League list, navigation, the Leagues page, loading a league. |
 | `js/common.js`, `js/sleeper.js` | Shared helpers and storage; Sleeper API calls. |
+| `js/sync.js` | Settings sync with the Worker. |
+| `worker/` | The sync Worker (Cloudflare Workers + KV) and its `wrangler.toml`. |
 | `js/trades.js` | Trade search and judging, shared by both sports (no DOM). |
 | `js/draft.js`, `js/lineup.js` | Rookie draft board; weekly best lineups and matchup (both sports, no DOM). |
 | `nfl/analysis.js`, `nfl/view.js` | Football: values, IDP model, lineups, move planner (no DOM) / its league page. |
 | `nba/analysis.js`, `nba/view.js` | Basketball: rankings match, lineups, needs, moves, rookie draft (no DOM) / its league page. |
 | `data/nfl/*.js` | Football values (all formats), IDP stats + FantasyPros ranks, this week's projections, Sleeper player list. |
 | `data/nba/*.js` | Hashtag Basketball dynasty rankings and crowdsourced keeper values, this week's projections, Sleeper player list. |
-| `data/leagues/<id>.js`, `data/home.js` | Built-in league snapshots and the built-in list. |
-| `leagues.json` | Which leagues are built in. Add an id here to give a league a daily snapshot. |
+| `data/leagues/<id>.js`, `data/home.js` | Daily league snapshots and the list of leagues that have one. |
+| `leagues.json` | Which leagues get a daily snapshot. |
 | `refresh_data.py` | Rebuilds everything under `data/`. Python 3, standard library only. |
-| `tests/smoke.js` | Runs both sports' analysis on the snapshots; `node tests/smoke.js`. |
+| `tests/smoke.js`, `tests/worker.mjs` | Both sports' analysis on the snapshots; the sync Worker against an in-memory KV. |
 | `.github/workflows/refresh.yml` | Daily refresh, smoke tests, GitHub Pages deploy. |
+| `.github/workflows/worker.yml` | Tests and deploys the sync Worker. |
 
 ## Hosting (GitHub Pages)
 
@@ -62,9 +89,10 @@ you. If KeepTradeCut itself can't be read, its values come from Dynasty Daddy's 
 ## Run locally
 
 ```sh
-python3 refresh_data.py          # both sports + built-in league snapshots (or --sport nfl / --sport nba)
+python3 refresh_data.py          # both sports + league snapshots (or --sport nfl / --sport nba)
 python3 -m http.server 8000      # then open http://localhost:8000/
 node tests/smoke.js
+node tests/worker.mjs
 ```
 
 ## How football suggestions are made

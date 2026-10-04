@@ -59,7 +59,7 @@ jobs:
       # Both sports' analysis against the league snapshots; a failure stops the deploy.
       # (Node comes preinstalled on GitHub's Ubuntu runners.)
       - name: Smoke tests
-        run: node tests/smoke.js
+        run: node tests/smoke.js && node tests/worker.mjs
 
       # Each deploy gets fresh file addresses (styles.css?v=<commit>), so browsers can't mix in
       # cached copies from an older version. Only the uploaded site is stamped, not the repo.

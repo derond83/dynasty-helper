@@ -16,8 +16,8 @@
   // Everything lives under "dh."; per-league settings under "dh.L.<league id>.".
   const raw = {
     get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
-    set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* storage blocked */ } },
-    del(k) { try { localStorage.removeItem(k); } catch (e) { /* storage blocked */ } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* storage blocked */ } if (DH.sync) DH.sync.touch(k); },
+    del(k) { try { localStorage.removeItem(k); } catch (e) { /* storage blocked */ } if (DH.sync) DH.sync.touch(k); },
   };
   const getJSON = (k, fallback) => { try { const v = JSON.parse(raw.get(k)); return v ?? fallback; } catch (e) { return fallback; } };
   const setJSON = (k, v) => raw.set(k, JSON.stringify(v));
@@ -31,7 +31,7 @@
     },
     // Move one league's settings to a new id (a league renewed for a new season).
     moveLeague(from, to) {
-      for (const k of ["team", "locked", "options"]) {
+      for (const k of ["team", "locked", "options", "matchupView"]) {
         const v = raw.get(`dh.L.${from}.${k}`);
         if (v != null && raw.get(`dh.L.${to}.${k}`) == null) raw.set(`dh.L.${to}.${k}`, v);
       }

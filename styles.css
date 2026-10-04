@@ -357,3 +357,10 @@ button.info .icon { vertical-align: 0; }
   box-shadow: 0 6px 20px rgba(0, 0, 0, .18); font-size: .88rem; line-height: 1.45; text-transform: none; letter-spacing: normal; font-weight: 400; }
 .section-head:has(button.info:hover) .info-tip, .section-head:has(button.info:focus-visible) .info-tip,
 .section-head .info-tip:hover, .section-head.tip-open .info-tip { display: block; }
+/* Leagues page: welcome, sync */
+.welcome h2 { margin: 0; }
+.welcome p { margin: 0; max-width: 75ch; }
+.steps { margin: 0; padding-left: 22px; display: grid; gap: 4px; font-weight: 600; }
+.sync-status { margin: 0; font-weight: 600; }
+.more.danger { color: var(--bad); border-color: currentColor; }
+.about p { margin: 0; max-width: 85ch; }
