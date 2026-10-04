@@ -13,14 +13,16 @@ Waiver-wire and roster advice for Sleeper **dynasty** leagues, football and bask
 ## Using it
 
 - **League tabs** across the top switch leagues. Each league has its own address (`#/<league id>/<tab>`), so links,
-  bookmarks and the back button work. Inside a league, **Moves**, **Players** and (football) **League** tabs split the page.
+  bookmarks and the back button work. Inside a league: **Moves** (waiver moves), **Trades** (trade ideas), **Players**
+  (your roster and the wire in one list), **League** (football: value table and method) and **Settings**.
+- **Settings** (per league, saved in this browser): your team, offensive values source (football), how waiver moves
+  and trades are judged, trade values source (basketball), and your locked players.
 - **Leagues page** (top right, or **＋ Add league**):
   - *Your Sleeper account*: enter your username once. Every league then opens on your team, your leagues are listed
     for one-click adding, and leagues are followed when Sleeper starts a new season (a dynasty league gets a new id
     each season).
   - *Add by league ID*: any Sleeper league that is **dynasty** and **football or basketball**. Redraft, keeper and
     guillotine leagues, and other sports, are refused with the reason.
-- Per league, your team choice, locked players and tuning are saved in this browser.
 - The two built-in leagues (`leagues.json`) get a daily snapshot, so they open even if Sleeper can't be reached.
   Leagues you add load live from Sleeper.
 
@@ -31,10 +33,11 @@ Waiver-wire and roster advice for Sleeper **dynasty** leagues, football and bask
 | `index.html`, `styles.css` | The app shell and styles. |
 | `js/app.js` | League list, navigation, the Leagues page, loading a league. |
 | `js/common.js`, `js/sleeper.js` | Shared helpers and storage; Sleeper API calls. |
+| `js/trades.js` | Trade search and judging, shared by both sports (no DOM). |
 | `nfl/analysis.js`, `nfl/view.js` | Football: values, IDP model, lineups, move planner (no DOM) / its league page. |
 | `nba/analysis.js`, `nba/view.js` | Basketball: rankings match, lineups, needs, moves, rookie draft (no DOM) / its league page. |
 | `data/nfl/*.js` | Football values (all formats), IDP stats + FantasyPros ranks, Sleeper player list. |
-| `data/nba/*.js` | Hashtag Basketball rankings, Sleeper player list. |
+| `data/nba/*.js` | Hashtag Basketball dynasty rankings and crowdsourced keeper values, Sleeper player list. |
 | `data/leagues/<id>.js`, `data/home.js` | Built-in league snapshots and the built-in list. |
 | `leagues.json` | Which leagues are built in. Add an id here to give a league a daily snapshot. |
 | `refresh_data.py` | Rebuilds everything under `data/`. Python 3, standard library only. |
@@ -104,8 +107,27 @@ Next to each IDP value is points per game above a waiver-level player at his pos
   12% value. IR players and locked players are never dropped.
 - **Rookie draft.** While a rookies-only draft is pending, rookies are shown on a draft board instead of the waiver wire.
 
+## How trade ideas are made (both sports)
+
+Every 1-for-1, 2-for-1 and 1-for-2 swap with each other team is checked (your locked, taxi and IR players are never
+offered). A trade is suggested only if all of these hold:
+
+1. **Fair on market value**, within the trade-fairness setting (10% by default) in both directions. The best player in
+   an uneven deal carries a premium (values are compared raised to the power 1.35), as trade calculators do. A player a
+   side would have to release to make room counts against that side.
+2. **It fills their need**: their starters improve, at a position where they're thin.
+3. **It gives you something concrete**: your starters improve, or you gain value (at least 3%).
+
+Ideas are ranked by your gain, nudged toward deals the other team will like more; at most two per partner, and the
+same player of yours appears in at most two.
+
+- **Football**: offense only, on KeepTradeCut or Dynasty Daddy value in the league's format. IDP has no trade market,
+  and draft picks aren't valued yet.
+- **Basketball**: on a 0–10,000 market-style scale. By default the average of Hashtag Basketball's crowdsourced
+  [keeper values](https://hashtagbasketball.com/keeper) (vote ratings: `10,000 · ((rating − 1,000) / (top − 1,000))^1.2`)
+  and its curated dynasty rank (`10,000 · e^(−(rank − 1)/45)`); Settings can switch to either one alone.
+
 ## Ideas for later
 
-- Trade suggestions (other rosters' players, using the same values).
 - Draft pick values in the league value table.
 - Rookie and taxi planning for the offseason in football.

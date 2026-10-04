@@ -11,11 +11,24 @@
   const ALIASES = { "carlton carrington": "bub carrington" };
   const SUFFIXES = new Set(["jr", "sr", "ii", "iii", "iv", "v"]);
 
-  // How strongly positional need lifts a player above their raw dynasty value.
-  const NEED_WEIGHT = 0.6;
-  // A swap must add at least this much dynasty value to be worth the churn
-  // (about 12 ranking spots in the 100–250 range).
-  const MIN_SWAP_GAIN = 1.12;
+  // Defaults for what the Settings tab lets you adjust.
+  const DEFAULTS = {
+    needWeight: 0.6,      // how strongly positional need lifts a player above his raw dynasty value
+    minGain: 0.12,        // a swap must add this share of dynasty value (about 12 ranking spots at 100–250)
+    tradeTolerance: 0.10, // trades: the most dynasty value either side may give up
+    tradeValues: "blend", // trades are judged on: "blend", "keeper" (crowdsourced market) or "rankings"
+  };
+  // Trades judge players on a steeper curve than waivers: the market pays far more for the very top.
+  // #1 = 10,000, #8 ≈ 8,560, #24 ≈ 6,000, #50 ≈ 3,370, #100 ≈ 1,100 (about KeepTradeCut's shape).
+  const tradeValue = (rank) => (rank ? 10000 * Math.exp(-(rank - 1) / 45) : 0);
+  // Hashtag Basketball's crowdsourced keeper values are vote ratings (top ≈ 2,500; ~1,000 is about where
+  // rostered players end). Above that floor they map onto the same 0–10,000 scale:
+  // #1 = 10,000, #8 ≈ 6,900, #24 ≈ 4,700, #50 ≈ 3,400, #100 ≈ 1,600, #200 ≈ 440.
+  const KEEPER_FLOOR = 1000;
+  const keeperValue = (rating, top) => 10000 * Math.pow(Math.max(0, (rating - KEEPER_FLOOR) / Math.max(1, top - KEEPER_FLOOR)), 1.2);
+  // Injury designations that keep a player out of trade ideas.
+  const UNAVAILABLE = new Set(["OUT", "Out", "IR", "Sus", "SUS"]);
+  const Trades = root.TradeEngine || (typeof require === "function" ? require("../js/trades.js") : null);
 
   function norm(s) {
     return (s || "")
@@ -179,8 +192,10 @@
    * myRosterId: roster_id of the user's team
    */
   function analyze(data, rankings, myRosterId, options) {
-    // Players the user has locked are never suggested as drops.
-    const locked = new Set(((options && options.locked) || []).map(String));
+    const cfg = { ...DEFAULTS, ...(options || {}) };
+    const NEED_WEIGHT = Number(cfg.needWeight), MIN_SWAP_GAIN = 1 + Number(cfg.minGain);
+    // Players the user has locked are never suggested as drops (or offered in trades).
+    const locked = new Set((cfg.locked || []).map(String));
     const { league, rosters, players } = data;
     const scoring = league.scoring_settings || {};
     const rp = league.roster_positions || [];
@@ -351,7 +366,44 @@
       rookieDraft = { status: draft.status, start: draft.start_time, rounds: draft.rounds, type: draft.type, picks, board };
     }
 
+    // Trade ideas: fair on dynasty value, fill the other team's thin position, help you.
+    // Trade value: the crowdsourced keeper market, the dynasty rankings on a market-style curve, or
+    // (default) the average of the two. A player missing from one source uses the other.
+    const keeper = cfg.keeper && cfg.keeper.length ? cfg.keeper : null;
+    const keeperById = keeper ? matchRankings(keeper, players).byId : new Map();
+    const keeperTop = keeper ? Math.max(...keeper.map((k) => k.value)) : 0;
+    const mode = keeper ? cfg.tradeValues : "rankings";
+    for (const [id, k] of keeperById) if (info[id]) info[id].keeper = { rank: k.rank, rating: k.value, value: keeperValue(k.value, keeperTop) };
+    const tv = (id) => {
+      const p = info[id], fromRank = p.rank ? tradeValue(p.rank) : null, fromKeeper = p.keeper ? p.keeper.value : null;
+      if (mode === "rankings") return fromRank || 0;
+      if (mode === "keeper") return fromKeeper ?? fromRank ?? 0;
+      return fromRank != null && fromKeeper != null ? (fromRank + fromKeeper) / 2 : (fromRank ?? fromKeeper ?? 0);
+    };
+    for (const id of Object.keys(info)) info[id].tradeValue = tv(id);
+    // Same players, valued on the trade scale, so starter strength and value share one scale.
+    const market = new Proxy({}, { get: (_, id) => ({ ...info[id], value: info[id].tradeValue }) });
+    const profileM = (ids) => groupProfile(ids, market, starters);
+    const total = (ids) => { const pr = profileM(ids); return GROUPS.reduce((s, g) => s + pr[g].strength, 0); };
+    const trades = Trades && cfg.trades !== false ? Trades.suggest({
+      me: { id: me.roster.roster_id, active: me.active, limit: maxActive },
+      partners: teams.filter((t) => t !== me).map((t) => ({ id: t.roster.roster_id, active: t.active, limit: maxActive })),
+      value: (id) => info[id].tradeValue,
+      strength: total,
+      groupStrength: (ids) => { const pr = profileM(ids); return Object.fromEntries(GROUPS.map((g) => [g, pr[g].strength])); },
+      needs: (ids) => needFor(groupProfile(ids, info, starters), leagueGroups, starters),
+      groupsOf: (id) => info[id].groups,
+      tradeable: (id) => info[id].tradeValue > 0 && !UNAVAILABLE.has(info[id].injury),
+      offerable: (id) => !locked.has(String(id)),
+      options: { tolerance: Number(cfg.tradeTolerance), minValueGain: 150 },
+    }) : [];
+    for (const t of trades) {
+      const team = teams.find((x) => x.roster.roster_id === t.partner);
+      t.theirRanks = Object.fromEntries(t.fills.map((g) => [g, leagueRank(g, team.profile[g].strength)]));
+    }
+
     return {
+      cfg, trades, tradeMode: mode,
       slots, starters, maxActive, scoring, rookieDraft,
       me: {
         rosterId: me.roster.roster_id,
@@ -372,7 +424,7 @@
     };
   }
 
-  const api = { analyze, matchRankings, bestLineup, rankValue, fantasyPoints, norm, GROUPS, POS_GROUP };
+  const api = { analyze, matchRankings, bestLineup, rankValue, tradeValue, fantasyPoints, norm, DEFAULTS, GROUPS, POS_GROUP };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.WaiverAnalysis = api;
 })(typeof window !== "undefined" ? window : globalThis);

@@ -6,7 +6,24 @@
   const PAGE = 30;
   const AUTO_MAX = 80; // rows shown before "Show more" when reaching for your last player
   const NAMES = { G: "Guards", F: "Forwards", C: "Centers" };
-  const TABS = [{ id: "moves", label: "Moves" }, { id: "players", label: "Players" }];
+  const TABS = [{ id: "moves", label: "Moves" }, { id: "trades", label: "Trades" }, { id: "players", label: "Players" }, { id: "settings", label: "Settings" }];
+  const MOVE_KNOBS = {
+    minGain: { label: "Minimum upgrade", min: 0, max: 0.5, step: 0.01, fmt: (v) => `${Math.round(v * 100)}%`,
+      help: "A waiver swap has to add at least this much dynasty value before it's suggested (12% is about 12 ranking spots in the 100–250 range)." },
+    needWeight: { label: "Positional need weight", min: 0, max: 1.5, step: 0.05, fmt: (v) => `×${v.toFixed(2)}`,
+      help: "How strongly being thin at G, F or C lifts a free agent above his raw dynasty value. 0 ignores need." },
+  };
+  const TRADE_VALUE_MODES = [["blend", "Blend of both (recommended)"], ["keeper", "Keeper market (crowdsourced)"], ["rankings", "Dynasty rankings (curated)"]];
+  const TRADE_VALUE_HELP = "Trades are judged on market value. Hashtag Basketball's crowdsourced keeper values show what managers actually rate players at; its curated dynasty rankings are the expert view. The blend averages the two. Waiver moves always use the curated rankings.";
+  const TRADE_MODE_NOTE = {
+    blend: "Trade value averages Hashtag Basketball's crowdsourced keeper values and its curated dynasty rankings, both on a 0–10,000 market-style scale.",
+    keeper: "Trade value comes from Hashtag Basketball's crowdsourced keeper values, on a 0–10,000 market-style scale.",
+    rankings: "Trade value follows the curated dynasty rank on a market-style curve (#1 = 10,000, #8 ≈ 8,560, #24 ≈ 6,000, #50 ≈ 3,370, #100 ≈ 1,100).",
+  };
+  const TRADE_KNOBS = {
+    tradeTolerance: { label: "Trade fairness", min: 0.03, max: 0.25, step: 0.01, fmt: (v) => `within ${Math.round(v * 100)}%`,
+      help: "How far apart the two sides' trade value may be. Lower is stricter (fewer, fairer ideas); higher allows bigger asks." },
+  };
 
   const views = new Map();
   const viewOf = (id) => {
@@ -19,7 +36,13 @@
     const rankings = window.HB_RANKINGS;
     const view = viewOf(ctx.id);
     const locked = new Set((ctx.store.get("locked", []) || []).map(String));
-    const result = A.analyze(ctx.data, rankings.players, ctx.rosterId, { locked: [...locked] });
+    const opts = () => ({ ...A.DEFAULTS, ...(ctx.store.get("options", {}) || {}) });
+    let result;
+    // Trades take a moment to search; only when the Trades tab is open.
+    const keeper = window.HB_KEEPER || null;
+    const analyze = () => (result = A.analyze(ctx.data, rankings.players, ctx.rosterId,
+      { ...opts(), locked: [...locked], trades: ctx.tab === "trades", keeper: keeper ? keeper.players : null }));
+    analyze();
     const scoring = ctx.data.league.scoring_settings || {};
     const pointsLeague = !!(scoring.pts || scoring.reb || scoring.ast);
 
@@ -46,7 +69,8 @@
       const L = ctx.data.league;
       const meta = `Sleeper · ${L.season} dynasty · ${L.total_rosters} teams · ${pointsLeague ? "points" : "categories"} scoring`;
       const extra = [`Hashtag Basketball dynasty rankings, ${esc(rankings.updated)} (${rankings.players.length} players)`];
-      return DH.leagueHead(ctx, { meta }) + DH.sourceLine(ctx, extra) + DH.warnBanner(rankings.warnings || []);
+      if (keeper) extra.push(`Hashtag Basketball keeper values (crowdsourced, ${Number(keeper.votes || 0).toLocaleString()} votes), ${esc(keeper.updated)}, used for trades`);
+      return DH.leagueHead(ctx, { meta }) + DH.sourceLine(ctx, extra) + DH.warnBanner([...(rankings.warnings || []), ...((keeper && keeper.warnings) || [])]);
     }
 
     function summaryHtml() {
@@ -141,7 +165,7 @@
           </article>`;
         }).join("");
       }
-      return `<section class="section"><div class="section-head"><h2>Recommended moves</h2><p>${esc(note)}</p></div><div class="moves">${body}</div></section>`;
+      return `<section class="section"><div class="section-head"><h2>Recommended moves</h2><p>${esc(note)} <a href="#/${esc(ctx.id)}/settings">Adjust in Settings</a>.</p></div><div class="moves">${body}</div></section>`;
     }
 
     function playerRows() {
@@ -225,17 +249,68 @@
       </footer>`;
     }
 
-    const tabBody = () => (ctx.tab === "players" ? playersTab() : `${positionsHtml()}${draftHtml()}${movesHtml()}`);
-    el.innerHTML = `${headHtml()}${summaryHtml()}${DH.subtabs(ctx, TABS)}<div class="stack">${tabBody()}</div>`;
+    function settingsSummary() {
+      const saved = ctx.store.get("options", {}) || {};
+      const changed = Object.keys({ ...MOVE_KNOBS, ...TRADE_KNOBS }).filter((k) => saved[k] != null && Number(saved[k]) !== A.DEFAULTS[k])
+        .concat(saved.tradeValues && saved.tradeValues !== A.DEFAULTS.tradeValues ? ["tradeValues"] : []);
+      return changed.length ? `${changed.length} setting${changed.length > 1 ? "s" : ""} changed from defaults.` : "All settings are at their defaults.";
+    }
+    function settingsTab() {
+      const team = `<div class="field"><label for="team-${esc(ctx.id)}">Your team</label><select id="team-${esc(ctx.id)}" class="team-select" data-team>${DH.teamOptions(ctx.data, ctx.rosterId)}</select></div>`;
+      const mine = result.me.active.concat(result.me.reserve);
+      return `<div class="stack settings-tab">${DH.settingsHtml([
+        { title: "League", note: `Settings here apply to ${esc(ctx.data.league.name)} only and are saved in this browser.`, body: `<div class="pickers">${team}</div>` },
+        { title: "Moves", note: "How waiver moves are judged.", body: DH.knobsHtml(ctx, MOVE_KNOBS, opts()) },
+        { title: "Trades", note: "How trade ideas are judged.", body: `<div class="pickers"><div class="field"><label for="tv-${esc(ctx.id)}">Trade values</label>
+            <select id="tv-${esc(ctx.id)}" class="source-select" data-tradevalues>${TRADE_VALUE_MODES.map(([v, l]) => `<option value="${v}"${opts().tradeValues === v ? " selected" : ""}>${l}</option>`).join("")}</select></div></div>
+            <p class="small muted">${TRADE_VALUE_HELP}</p>${DH.knobsHtml(ctx, TRADE_KNOBS, opts())}` },
+        { title: "Locked players", note: "Never suggested as a drop, and never offered in a trade.", body: DH.lockedListHtml(locked, mine, posChips) },
+      ])}
+      <div class="toolbar"><button type="button" class="more reset" data-reset>Reset settings to defaults</button><span class="muted small" data-r="settings-sum">${esc(settingsSummary())}</span></div></div>`;
+    }
+
+    function tradesTab() {
+      const fmt = {
+        meta: (id) => { const p = result.info[id]; return `${posChips(p.groups)} ${esc(p.team)} · ${rankText(p)}${p.keeper ? ` <span title="Crowdsourced keeper rank">· keeper #${p.keeper.rank}</span>` : ""} · ${ageFmt(p.age)} yrs ${injTag(p)}`; },
+        value: (v) => Math.round(v).toLocaleString(),
+        partner: (rid) => { const t = DH.teamName(ctx.data, rid), o = DH.ownerName(ctx.data, rid); return o && o !== t ? `${t} · ${o}` : t; },
+        group: (g) => NAMES[g].toLowerCase().replace(/s$/, ""),
+      };
+      const cards = DH.tradeCards(ctx, result.trades, locked, result.info, fmt, result.positions[0].teams);
+      const tol = Math.round(Number(opts().tradeTolerance) * 100);
+      return `<section class="section">
+        <div class="section-head"><h2>Trade ideas</h2>
+          <p>Each idea is fair on trade value (within ${tol}%, with a premium for the best player in a 2-for-1), fills a position where the other team is thin, and gives you something concrete: better starters or more value. ${esc(TRADE_MODE_NOTE[result.tradeMode])} Locked and injured players are left out. <a href="#/${esc(ctx.id)}/settings">Adjust in Settings</a>.</p></div>
+        <div class="trades">${cards || `<div class="empty">No trade fits all three tests right now. Loosen trade fairness in <a href="#/${esc(ctx.id)}/settings">Settings</a> to see more.</div>`}</div>
+      </section>`;
+    }
+
+    const tabBody = () => (ctx.tab === "players" ? playersTab() : ctx.tab === "trades" ? tradesTab() : ctx.tab === "settings" ? settingsTab()
+      : `${positionsHtml()}${draftHtml()}${movesHtml()}`);
+    el.innerHTML = `${headHtml()}<div data-r="summary">${summaryHtml()}</div>${DH.subtabs(ctx, TABS)}<div class="stack">${tabBody()}</div>`;
+    // A slider moved: recompute, refresh the summary and readouts, leave the sliders alone.
+    function redrawAfterTuning() {
+      analyze();
+      el.querySelector('[data-r="summary"]').innerHTML = summaryHtml();
+      const K = { ...MOVE_KNOBS, ...TRADE_KNOBS }, v = opts();
+      for (const out of el.querySelectorAll("[data-out]")) out.textContent = K[out.dataset.out].fmt(Number(v[out.dataset.out]));
+      el.querySelector('[data-r="settings-sum"]').textContent = settingsSummary();
+    }
     const redrawPlayers = () => { const r = el.querySelector('[data-r="players"]'); if (r) r.innerHTML = playersTable(); };
 
     el.onchange = (e) => {
       const t = e.target;
       if (t.matches("[data-team]")) return ctx.setTeam(t.value);
+      if (t.matches("[data-tradevalues]")) { ctx.store.set("options", { ...(ctx.store.get("options", {}) || {}), tradeValues: t.value }); return ctx.rerender(); }
       if (t.matches("[data-sort]")) { view.wireSort = t.value; view.wireShown = null; return redrawPlayers(); }
     };
     el.oninput = (e) => {
-      if (e.target.matches("[data-search]")) { view.wireQuery = e.target.value; view.wireShown = null; redrawPlayers(); }
+      const t = e.target;
+      if (t.matches("[data-knob]")) {
+        ctx.store.set("options", { ...(ctx.store.get("options", {}) || {}), [t.dataset.knob]: Number(t.value) });
+        return redrawAfterTuning();
+      }
+      if (t.matches("[data-search]")) { view.wireQuery = t.value; view.wireShown = null; redrawPlayers(); }
     };
     el.onclick = (e) => {
       const b = e.target.closest("button");
@@ -247,6 +322,7 @@
         ctx.rerender();
         return DH.refocus(`button[data-lock="${CSS.escape(id)}"]`);
       }
+      if (b.hasAttribute("data-reset")) { ctx.store.set("options", {}); return ctx.rerender(); }
       if (b.dataset.open) {
         view.open.has(b.dataset.open) ? view.open.delete(b.dataset.open) : view.open.add(b.dataset.open);
         redrawPlayers();
@@ -269,7 +345,7 @@
   DH.sports.nba = {
     id: "nba", label: "Basketball", short: "NBA",
     playersGlobal: "SLEEPER_PLAYERS_NBA",
-    files: () => ["data/nba/players.js", "data/nba/rankings.js", "nba/analysis.js"],
+    files: () => ["data/nba/players.js", "data/nba/rankings.js", "data/nba/keeper.js", "nba/analysis.js"],
     tabs: TABS,
     render,
   };

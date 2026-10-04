@@ -9,13 +9,29 @@ const load = (f) => require(path.join(root, f));
 
 load("data/home.js");
 load("data/nfl/players.js"); load("data/nfl/values.js"); load("data/nfl/idp.js");
-load("data/nba/players.js"); load("data/nba/rankings.js");
+load("data/nba/players.js"); load("data/nba/rankings.js"); load("data/nba/keeper.js");
 const NFL = load("nfl/analysis.js");
 const NBA = load("nba/analysis.js");
 
 let failures = 0;
 function test(name, fn) {
   try { fn(); console.log("ok  ", name); } catch (e) { failures++; console.log("FAIL", name, "\n     ", e.message); }
+}
+
+// Every suggested trade: your unlocked active players for the partner's, fair within the
+// tolerance (with a little slack for the 2-for-1 premium), filling their need, helping you.
+function checkTrades(res, rosters, myId, tol, eligible) {
+  const mine = new Set(res.me.active.map((p) => String(p.id)));
+  for (const t of res.trades) {
+    const partner = rosters.find((r) => r.roster_id === t.partner);
+    assert(partner && t.partner !== myId, "partner is another team");
+    const theirs = new Set((partner.players || []).map(String));
+    assert(t.give.every((id) => mine.has(String(id)) && eligible(id)), "gives only your eligible active players");
+    assert(t.get.every((id) => theirs.has(String(id)) && eligible(id)), "gets only the partner's eligible players");
+    assert(t.fairness >= (1 - tol) * 0.95 && t.fairness <= 1 / ((1 - tol) * 0.95), `fair within tolerance (got ${t.fairness.toFixed(3)})`);
+    assert(t.fills.length > 0 && t.theirGain > 0, "fills a need for them");
+    assert(t.myGain > 0 || t.myValue > 0, "gives you something concrete");
+  }
 }
 
 for (const home of window.HOME_LEAGUES) {
@@ -36,6 +52,18 @@ for (const home of window.HOME_LEAGUES) {
         }
       });
     }
+    test(`nfl ${home.name}: trade ideas are legitimate for every team`, () => {
+      for (const r of rosters) {
+        const res = NFL.analyze(data, window.DYNASTY_VALUES, window.IDP_DATA, r.roster_id, { locked: [] });
+        checkTrades(res, rosters, r.roster_id, NFL.DEFAULTS.tradeTolerance, (id) => res.info[id].domain === "off");
+      }
+    });
+    test(`nfl ${home.name}: locked players are never offered in a trade`, () => {
+      const r = rosters[0];
+      const ids = NFL.analyze(data, window.DYNASTY_VALUES, window.IDP_DATA, r.roster_id, {}).me.active.map((p) => p.id);
+      const res = NFL.analyze(data, window.DYNASTY_VALUES, window.IDP_DATA, r.roster_id, { locked: ids });
+      assert.strictEqual(res.trades.length, 0);
+    });
     test(`nfl ${home.name}: a locked player is never dropped`, () => {
       const r = rosters[0];
       const first = NFL.analyze(data, window.DYNASTY_VALUES, window.IDP_DATA, r.roster_id, {});
@@ -72,6 +100,14 @@ for (const home of window.HOME_LEAGUES) {
         for (const m of res.moves) assert(!m.drop || active.has(String(m.drop.id)));
       });
     }
+    test(`nba ${home.name}: trade ideas are legitimate for every team`, () => {
+      for (const r of rosters) {
+        for (const tradeValues of ["blend", "keeper", "rankings"]) {
+          const res = NBA.analyze(data, window.HB_RANKINGS.players, r.roster_id, { keeper: window.HB_KEEPER.players, tradeValues });
+          checkTrades(res, rosters, r.roster_id, NBA.DEFAULTS.tradeTolerance, () => true);
+        }
+      }
+    });
     test(`nba ${home.name}: a locked player is never dropped`, () => {
       const r = rosters[0];
       const ids = NBA.analyze(data, window.HB_RANKINGS.players, r.roster_id, {}).me.active.map((p) => p.id);

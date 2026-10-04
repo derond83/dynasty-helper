@@ -24,6 +24,7 @@
     fpWeight: 0.3,      // pull of FantasyPros dynasty rankings on IDP value
     multiBonus: 0.05,   // boost for DL/LB or LB/DB eligibility
     minGain: 0.12,      // a swap must add this share of value
+    tradeTolerance: 0.10, // trades: the most market value either side may give up
   };
 
   // Slots nothing here values; reported, and left out of lineups.
@@ -40,6 +41,8 @@
 
   // Injury designations that keep a free agent out of suggested moves (he still shows on the wire).
   const UNAVAILABLE = new Set(["IR", "PUP", "Sus", "NA", "DNR", "COV"]);
+
+  const Trades = root.TradeEngine || (typeof require === "function" ? require("../js/trades.js") : null);
 
   const SUFFIXES = new Set(["jr", "sr", "ii", "iii", "iv", "v"]);
   function norm(s) {
@@ -545,6 +548,25 @@
     // Same fit score for your own players, so roster and wire sort together (within a side).
     for (const id of me.all) info[id].fit = info[id].norm * (1 + NEED_WEIGHT * needOf(info[id], myNeeds));
 
+    // Trade ideas, offense only: KeepTradeCut / Dynasty Daddy are trade markets; IDP has none.
+    const offIds = (ids) => ids.filter((id) => info[id].domain === "off");
+    const offLimit = (t) => Math.max(offIds(t.active).length, maxActive - cfg.idpSpots);
+    const offStrength = (ids) => OFFENSE.reduce((s, g) => s + strength(ids, g), 0);
+    const trades = Trades && cfg.trades !== false ? Trades.suggest({
+      me: { id: me.roster.roster_id, active: offIds(me.active), limit: offLimit(me) },
+      partners: teams.filter((t) => t !== me).map((t) => ({ id: t.roster.roster_id, active: offIds(t.active), limit: Math.max(offIds(t.active).length, maxActive - idpCount(t.active)) })),
+      value: (id) => info[id].value,
+      strength: offStrength,
+      groupStrength: (ids) => Object.fromEntries(OFFENSE.map((g) => [g, strength(ids, g)])),
+      needs: needsFor,
+      groupsOf: (id) => info[id].groups,
+      tradeable: (id) => info[id].value > 0 && !UNAVAILABLE.has(info[id].injury),
+      offerable: (id) => !locked.has(id),
+      options: { tolerance: cfg.tradeTolerance, minValueGain: MIN_ABS_GAIN.off },
+    }) : [];
+    const groupRank = (id, g) => leagueG[g].sorted.filter((v) => v > strength(teams.find((t) => t.roster.roster_id === id).active, g) + 1e-9).length + 1;
+    for (const t of trades) t.theirRanks = Object.fromEntries(t.fills.map((g) => [g, groupRank(t.partner, g)]));
+
     const standings = teams.map((t) => ({
       rosterId: t.roster.roster_id, value: t.value, idpValue: t.idpValue,
       offStarters: t.lineup.off.total * scale.off, players: t.all.length,
@@ -565,7 +587,7 @@
         faab: ((league.settings && league.settings.waiver_budget) || 0) -
           ((me.roster.settings && me.roster.settings.waiver_budget_used) || 0),
       },
-      positions, needs: myNeeds, moves, waivers, standings, info, repl: idpVals.repl,
+      positions, needs: myNeeds, moves, waivers, trades, standings, info, repl: idpVals.repl,
     };
   }
 

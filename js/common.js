@@ -85,28 +85,92 @@
   };
 
   /** League title block: meta line, name, extra controls (left of the team picker), team picker. */
-  DH.leagueHead = function (ctx, { meta, controls = "" }) {
-    const data = ctx.data;
-    const options = data.rosters.slice()
+  /** Options for the team picker, sorted by team name. */
+  DH.teamOptions = function (data, selected) {
+    return data.rosters.slice()
       .sort((a, b) => DH.teamName(data, a.roster_id).localeCompare(DH.teamName(data, b.roster_id)))
       .map((r) => {
         const t = DH.teamName(data, r.roster_id), o = DH.ownerName(data, r.roster_id);
-        return `<option value="${r.roster_id}"${String(r.roster_id) === String(ctx.rosterId) ? " selected" : ""}>${esc(t)}${o && o !== t ? " · " + esc(o) : ""}</option>`;
+        return `<option value="${r.roster_id}"${String(r.roster_id) === String(selected) ? " selected" : ""}>${esc(t)}${o && o !== t ? " · " + esc(o) : ""}</option>`;
       }).join("");
+  };
+
+  /** League title block: meta line, name, and your team (changed on the Settings tab). */
+  DH.leagueHead = function (ctx, { meta }) {
+    const data = ctx.data;
+    const team = DH.teamName(data, ctx.rosterId), owner = DH.ownerName(data, ctx.rosterId);
     return `<header class="top">
       <div class="brand">
         <span class="eyebrow">${esc(meta)}</span>
         <h1>${esc(data.league.name)}</h1>
       </div>
-      <div class="pickers">
-        ${controls}
-        <div class="field">
-          <label for="team-${esc(ctx.id)}">Your team</label>
-          <select id="team-${esc(ctx.id)}" class="team-select" data-team>${options}</select>
-        </div>
+      <div class="whoami">
+        <span class="eyebrow">Your team</span>
+        <span class="team-name">${esc(team)}${owner && owner !== team ? ` <span class="muted">· ${esc(owner)}</span>` : ""}</span>
+        <a class="small" href="#/${esc(ctx.id)}/settings">Change in Settings</a>
       </div>
     </header>
-    ${ctx.teamGuessed ? `<div class="banner"><span><strong>Pick your team.</strong> Suggestions are showing for ${esc(DH.teamName(data, ctx.rosterId))}. Choose yours from the menu above, or add your Sleeper username on the <a href="#/leagues">Leagues</a> page so every league opens on your team.</span></div>` : ""}`;
+    ${ctx.teamGuessed ? `<div class="banner"><span><strong>Pick your team.</strong> Suggestions are showing for ${esc(team)}. Choose yours on the <a href="#/${esc(ctx.id)}/settings">Settings</a> tab, or add your Sleeper username on the <a href="#/leagues">Leagues</a> page so every league opens on your team.</span></div>` : ""}`;
+  };
+
+  // ---------- Settings tab pieces ----------
+
+  /** Sliders. defs: { key: { label, min, max, step, fmt(v), help } }; values: { key: number }. */
+  DH.knobsHtml = (ctx, defs, values) => `<div class="knobs">${Object.entries(defs).map(([k, d]) => `<div class="knob">
+      <div class="lab"><label for="k-${k}-${esc(ctx.id)}">${esc(d.label)}</label><output data-out="${k}">${esc(d.fmt(Number(values[k])))}</output></div>
+      <input type="range" id="k-${k}-${esc(ctx.id)}" data-knob="${k}" min="${d.min}" max="${d.max}" step="${d.step}" value="${values[k]}">
+      <p>${d.help}</p></div>`).join("")}</div>`;
+
+  /** Locked players with unlock buttons. players: [{ id, name, team, groups }] */
+  DH.lockedListHtml = (locked, players, chips) => {
+    const rows = players.filter((p) => locked.has(String(p.id)));
+    return rows.length
+      ? `<ul class="lrows">${rows.map((p) => `<li class="lrow"><span class="lrow-text"><span class="lname">${esc(p.name)}</span><span class="muted small">${chips(p.groups)} ${esc(p.team || "")}</span></span><span class="lrow-actions">${DH.lockBtn(locked, p)}</span></li>`).join("")}</ul>`
+      : '<p class="muted">No locked players. Use the Lock button on a player in the Players tab, a recommended move or a trade to keep him off the drop and trade lists.</p>';
+  };
+
+  /** The Settings tab shell; sections: [{ title, note, body }]. */
+  DH.settingsHtml = (sections) => sections.map((s) => `<section class="card section">
+      <div class="section-head"><h2>${esc(s.title)}</h2>${s.note ? `<p>${s.note}</p>` : ""}</div>${s.body}</section>`).join("");
+
+  // ---------- Trades ----------
+
+  /**
+   * Trade suggestion cards. fmt: { name(id), meta(id) (html), value(v) (text), unit, partner(rosterId) (text),
+   * group(g) (text) }. t: a TradeEngine suggestion with theirRanks.
+   */
+  DH.tradeCards = function (ctx, trades, locked, info, fmt, teams) {
+    if (!trades.length) return "";
+    const side = (ids, mineSide) => ids.map((id) => `<li><span class="nm">${esc(info[id].name)}</span>
+        <span class="meta">${fmt.meta(id)}</span>${mineSide ? DH.lockBtn(locked, info[id]) : ""}</li>`).join("");
+    const signed = (v) => `${v >= 0 ? "+" : "−"}${fmt.value(Math.abs(v))}`;
+    return trades.map((t, i) => {
+      const why = [];
+      for (const g of t.fills) why.push(`<span class="tag fit">Fills their ${esc(fmt.group(g))}${t.theirRanks && t.theirRanks[g] ? ` (${DH.fmt.ordinal(t.theirRanks[g])} of ${teams})` : ""}</span>`);
+      if (t.myGain > 0) {
+        const up = t.myChanges.filter(([, d]) => d > 0).sort((a, b) => b[1] - a[1]).map(([g, d]) => `${fmt.group(g)} ${signed(d)}`);
+        why.push(`<span class="tag fit">Your starters ${signed(t.myGain)}${up.length ? ` (${esc(up.join(", "))})` : ""}</span>`);
+      }
+      why.push(`<span class="tag${t.myValue >= 0 ? " fit" : ""}">Value ${signed(t.myValue)} for you</span>`);
+      // Fairness is judged with the premium for the best player in an uneven deal, so it can differ
+      // from the plain value change above; say how close it is, not who "wins".
+      const pctOff = Math.round(Math.abs(1 - t.fairness) * 100);
+      const uneven = t.give.length !== t.get.length;
+      why.push(`<span>${pctOff <= 2 ? "Even on value" : `Fair: ${pctOff}% apart`}${uneven ? ", counting the 2-for-1 premium" : ""} · their starters ${signed(t.theirGain)}</span>`);
+      const drops = [];
+      if (t.myDrop.length) drops.push(`You'd release ${t.myDrop.map((id) => esc(info[id].name)).join(", ")} to make room.`);
+      if (t.theirDrop.length) drops.push(`They'd release ${t.theirDrop.map((id) => esc(info[id].name)).join(", ")} to make room.`);
+      return `<article class="trade">
+        <header><span class="step">${i + 1}</span><span>Trade with <strong>${esc(fmt.partner(t.partner))}</strong></span></header>
+        <div class="trade-sides">
+          <div class="tside"><span class="verb drop">You give</span><ul>${side(t.give, true)}</ul></div>
+          <div class="arrow" aria-hidden="true">⇄</div>
+          <div class="tside"><span class="verb add">You get</span><ul>${side(t.get, false)}</ul></div>
+        </div>
+        <div class="why">${why.join("")}</div>
+        ${drops.length ? `<p class="small muted">${drops.join(" ")}</p>` : ""}
+      </article>`;
+    }).join("");
   };
 
   DH.sourceLine = function (ctx, extra) {

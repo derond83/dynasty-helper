@@ -274,3 +274,32 @@ a.more { text-decoration: none; color: var(--ink); display: inline-flex; align-i
 .srcs summary { cursor: pointer; color: var(--muted); }
 .srcs[open] { flex-basis: 100%; }
 .srcs ul { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 2px; }
+
+/* League header: your team */
+.whoami { display: grid; gap: 2px; text-align: right; }
+.whoami .team-name { font-weight: 600; font-size: 1.05rem; }
+@media (max-width: 640px) { .whoami { text-align: left; } }
+
+/* Trade cards */
+.trades { display: grid; gap: 12px; }
+.trade { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 12px 14px; display: grid; gap: 10px; }
+.trade > header { display: flex; align-items: center; gap: 10px; }
+.trade .step { font-family: var(--font-display); font-size: 1.4rem; font-weight: 700; color: var(--muted); }
+.trade-sides { display: grid; grid-template-columns: minmax(0, 1fr) 1.5rem minmax(0, 1fr); gap: 10px 14px; align-items: start; }
+.trade .arrow { color: var(--muted); font-size: 1.2rem; text-align: center; align-self: center; }
+.tside { display: grid; gap: 6px; min-width: 0; }
+.tside .verb { font-size: .7rem; letter-spacing: .1em; text-transform: uppercase; font-weight: 700; }
+.tside .verb.add { color: var(--good); } .tside .verb.drop { color: var(--bad); }
+.tside ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.tside li { display: grid; gap: 2px; }
+.tside li .nm { font-weight: 600; font-size: 1.02rem; }
+.tside li .meta { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; font-size: .82rem; color: var(--muted); }
+.tside li .lock { justify-self: start; margin-top: 2px; }
+.trade .why { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: .85rem; color: var(--muted); }
+@media (max-width: 640px) {
+  .trade-sides { grid-template-columns: minmax(0, 1fr); }
+  .trade .arrow { display: none; }
+}
+.settings-tab .card .knobs { padding: 0; }
+.trade .tag { white-space: normal; }
+.stack > * { min-width: 0; }

@@ -12,6 +12,7 @@ Sport-wide data (any league of that sport uses it):
   data/nfl/idp.js       IDP stat lines from Sleeper (three seasons) and FantasyPros dynasty DL/LB/DB ranks
   data/nfl/players.js   Sleeper player list (active players on a team, plus anyone on a built-in roster)
   data/nba/rankings.js  Hashtag Basketball dynasty rankings (it blocks direct browser requests)
+  data/nba/keeper.js    Hashtag Basketball crowdsourced keeper values, used to judge trades
   data/nba/players.js   Sleeper player list
 
 Built-in leagues (listed in leagues.json) also get a snapshot each, used when Sleeper can't be
@@ -43,6 +44,7 @@ FP_URL = "https://www.fantasypros.com/nfl/rankings/dynasty-{}.php"
 # Basketball source
 HB_URL = "https://hashtagbasketball.com/fantasy-basketball-dynasty-rankings"
 HB_STATS = ["FG%", "FT%", "3PM", "PTS", "REB", "AST", "STL", "BLK", "TO"]
+HB_KEEPER_URL = "https://hashtagbasketball.com/keeper"  # crowdsourced keeper values (market-style, used for trades)
 
 OFFENSE = {"QB", "RB", "WR", "TE"}
 IDP = {"DL", "LB", "DB"}
@@ -425,6 +427,43 @@ def refresh_rankings():
     print(f"Rankings: {len(players)} players -> {path.relative_to(HERE)}")
 
 
+def parse_keeper(page):
+    table = re.search(r'<table[^>]*id="ContentPlaceHolder1_GridView1".*?</table>', page, re.S)
+    if not table:
+        raise ValueError("no keeper table; the page layout may have changed")
+    players = []
+    for row in re.findall(r"<tr.*?</tr>", table.group(0), re.S)[1:]:
+        cells = re.findall(r"<td[^>]*>(.*?)</td>", row, re.S)
+        if len(cells) < 6 or not text(cells[0]).isdigit():
+            continue
+        hbid = re.search(r'href="/(\d+)/dynasty"', cells[1])
+        players.append({
+            "rank": int(text(cells[0])), "name": text(cells[1]), "team": text(cells[2]) or "FA",
+            "pos": [x for x in text(cells[3]).split(",") if x], "age": float(text(cells[4]) or 0) or None,
+            "value": int(text(cells[5])), "hbid": hbid.group(1) if hbid else None,
+        })
+    votes = re.search(r"using ([\d,]+) votes", page)
+    updated = re.search(r"Updated:(?:</strong>)?\s*([^<]+?)\s*<", page)
+    return players, (int(votes.group(1).replace(",", "")) if votes else None), (updated.group(1).strip() if updated else None)
+
+
+def refresh_keeper():
+    try:
+        players, votes, updated = parse_keeper(get(HB_KEEPER_URL, as_json=False))
+        if len(players) < 200:
+            raise ValueError(f"only parsed {len(players)} players")
+    except Exception as e:  # noqa: BLE001
+        warn(f"NBA Hashtag Basketball keeper values: {e}")
+        old = read_js("nba/keeper.js")
+        if old:
+            old["warnings"] = [f"Hashtag Basketball keeper values: {e}"]
+            write_js("nba/keeper.js", "window.HB_KEEPER", old)
+        return
+    path = write_js("nba/keeper.js", "window.HB_KEEPER", {"source": HB_KEEPER_URL, "updated": updated or date.today().isoformat(),
+                                                           "votes": votes, "players": players, "warnings": []})
+    print(f"Keeper values: {len(players)} players ({votes} votes, updated {updated}) -> {path.relative_to(HERE)}")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--sport", choices=["nfl", "nba"], help="refresh one sport's data only")
@@ -456,6 +495,7 @@ def main():
     if "nba" in sports:
         refresh_players("nba", sleeper_players("nba"), rostered["nba"])
         refresh_rankings()
+        refresh_keeper()
 
     if warnings:
         print(f"\n{len(warnings)} source(s) failed; their last good data was kept.", file=sys.stderr)

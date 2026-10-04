@@ -8,7 +8,12 @@
   const GROUP_NAMES = { QB: "Quarterbacks", RB: "Running backs", WR: "Receivers", TE: "Tight ends", DL: "Defensive line", LB: "Linebackers", DB: "Defensive backs" };
   // Sleeper depth chart spots that usually mean a box player (tackles and sacks).
   const BOX = new Set(["SS", "NB", "MLB", "ILB", "LILB", "RILB", "WLB", "SLB", "LB"]);
-  const TABS = [{ id: "moves", label: "Moves" }, { id: "players", label: "Players" }, { id: "league", label: "League" }];
+  const TABS = [{ id: "moves", label: "Moves" }, { id: "trades", label: "Trades" }, { id: "players", label: "Players" },
+    { id: "league", label: "League" }, { id: "settings", label: "Settings" }];
+  const TRADE_KNOBS = {
+    tradeTolerance: { label: "Trade fairness", min: 0.03, max: 0.25, step: 0.01, fmt: (v) => `within ${Math.round(v * 100)}%`,
+      help: "How far apart the two sides' market value may be. Lower is stricter (fewer, fairer ideas); higher allows bigger asks." },
+  };
 
   // Per-league view state that doesn't need to survive a reload.
   const views = new Map();
@@ -45,7 +50,8 @@
     const opts = () => ({ ...A.DEFAULTS, ...(ctx.store.get("options", {}) || {}) });
     let result = null;
     const analyze = () => {
-      result = A.analyze(ctx.data, values, idp, ctx.rosterId, { ...opts(), locked: [...locked] });
+      // Trades take a moment to search; only when the Trades tab is open.
+      result = A.analyze(ctx.data, values, idp, ctx.rosterId, { ...opts(), locked: [...locked], trades: ctx.tab === "trades" });
       return result;
     };
     analyze();
@@ -109,8 +115,6 @@
     function headHtml() {
       const L = ctx.data.league, st = ctx.data.state || {};
       const meta = `Sleeper · ${L.season} dynasty · ${L.total_rosters} teams · ${result.format.label}${result.hasIdp ? " · IDP" : ""}${st.week && st.season_type === "regular" ? ` · week ${st.week}` : ""}`;
-      const sel = `<div class="field"><label for="src-${esc(ctx.id)}">Offensive values</label><select id="src-${esc(ctx.id)}" class="source-select" data-source>${
-        Object.entries(values.sources).map(([k, s]) => `<option value="${k}"${k === result.source.key ? " selected" : ""}>${esc(s.label)}</option>`).join("")}</select></div>`;
       const extra = Object.values(values.sources).map((s) => `${esc(s.label)}, ${esc(s.updated || "?")}`);
       if (result.format.tepMissing) extra.push(`${esc(result.source.label)} has no TE-premium values; its standard values are used`);
       if (result.hasIdp && idp) {
@@ -120,7 +124,7 @@
         if (fpAny) extra.push(`FantasyPros dynasty IDP, ${esc(fpAny.updated)} (${fpAny.experts} experts)`);
       }
       const warns = [...(values.warnings || []), ...(result.hasIdp && idp ? idp.warnings || [] : [])];
-      return DH.leagueHead(ctx, { meta, controls: sel }) + DH.sourceLine(ctx, extra) + DH.warnBanner(warns);
+      return DH.leagueHead(ctx, { meta }) + DH.sourceLine(ctx, extra) + DH.warnBanner(warns);
     }
 
     function summaryHtml() {
@@ -135,23 +139,45 @@
       return DH.summary(cells);
     }
 
-    function tuningHtml() {
-      const K = knobs(result), o = { ...opts(), idpSpots: result.cfg.idpSpots };
-      return `<details class="settings" data-tuning${view.tuningOpen ? " open" : ""}>
-        <summary><span>Tuning</span><span class="muted" data-r="tuning-sum"></span></summary>
-        <div class="knobs">${Object.entries(K).map(([k, d]) => `<div class="knob">
-            <div class="lab"><label for="k-${k}-${esc(ctx.id)}">${d.label}</label><output data-out="${k}">${d.fmt(Number(o[k]))}</output></div>
-            <input type="range" id="k-${k}-${esc(ctx.id)}" data-knob="${k}" min="${d.min}" max="${d.max}" step="${d.step}" value="${o[k]}">
-            <p>${d.help}</p></div>`).join("")}
-          <button type="button" class="more reset" data-reset>Reset to defaults</button>
-        </div>
-      </details>`;
-    }
-    function tuningSummary() {
+    // ---------- Settings ----------
+    function knobValues() { return { ...opts(), idpSpots: result.cfg.idpSpots }; }
+    function settingsSummary() {
       const saved = ctx.store.get("options", {}) || {};
-      const changed = Object.keys(knobs(result)).filter((k) => saved[k] != null && Number(saved[k]) !== (k === "idpSpots" ? result.idpSlots.length + 2 : A.DEFAULTS[k]));
-      return changed.length ? `${changed.length} setting${changed.length > 1 ? "s" : ""} changed from defaults`
-        : `Defaults: dynasty values${result.hasIdp ? `, ${result.cfg.idpSpots} IDP spots` : ""}`;
+      const keys = Object.keys(knobs(result)).concat(Object.keys(TRADE_KNOBS));
+      const changed = keys.filter((k) => saved[k] != null && Number(saved[k]) !== (k === "idpSpots" ? result.idpSlots.length + 2 : A.DEFAULTS[k]));
+      return changed.length ? `${changed.length} setting${changed.length > 1 ? "s" : ""} changed from defaults.` : "All settings are at their defaults.";
+    }
+    function settingsTab() {
+      const source = `<div class="field"><label for="src-${esc(ctx.id)}">Offensive values</label><select id="src-${esc(ctx.id)}" class="source-select" data-source>${
+        Object.entries(values.sources).map(([k, s]) => `<option value="${k}"${k === result.source.key ? " selected" : ""}>${esc(s.label)}</option>`).join("")}</select></div>`;
+      const team = `<div class="field"><label for="team-${esc(ctx.id)}">Your team</label><select id="team-${esc(ctx.id)}" class="team-select" data-team>${DH.teamOptions(ctx.data, ctx.rosterId)}</select></div>`;
+      const mine = result.me.active.concat(result.me.taxi, result.me.ir);
+      return `<div class="stack settings-tab">${DH.settingsHtml([
+        { title: "League", note: `Settings here apply to ${esc(ctx.data.league.name)} only and are saved in this browser. Values are read in this league's format: ${esc(result.format.label)}.`,
+          body: `<div class="pickers">${team}${source}</div>` },
+        { title: "Moves", note: "How waiver moves are judged.", body: DH.knobsHtml(ctx, knobs(result), knobValues()) },
+        { title: "Trades", note: "How trade ideas are judged. Trades use offensive market value only; IDP has no trade market.", body: DH.knobsHtml(ctx, TRADE_KNOBS, knobValues()) },
+        { title: "Locked players", note: "Never suggested as a drop, and never offered in a trade.", body: DH.lockedListHtml(locked, mine, posChips) },
+      ])}
+      <div class="toolbar"><button type="button" class="more reset" data-reset>Reset settings to defaults</button><span class="muted small" data-r="settings-sum">${esc(settingsSummary())}</span></div></div>`;
+    }
+
+    // ---------- Trades ----------
+    function tradesTab() {
+      const teams = result.standings.length;
+      const fmt = {
+        meta: (id) => { const p = result.info[id]; return `${posChips(p.groups)} ${esc(p.team)} · ${valueCell(p)} · ${ageFmt(p.age)} yrs ${injTag(p)}`; },
+        value: (v) => int(v),
+        partner: (rid) => { const t = DH.teamName(ctx.data, rid), o = DH.ownerName(ctx.data, rid); return o && o !== t ? `${t} · ${o}` : t; },
+        group: (g) => g,
+      };
+      const cards = DH.tradeCards(ctx, result.trades, locked, result.info, fmt, teams);
+      const tol = Math.round(Number(opts().tradeTolerance) * 100);
+      return `<section class="section">
+        <div class="section-head"><h2>Trade ideas</h2>
+          <p>Each idea is fair on ${esc(result.source.label)} value (within ${tol}%, with a premium for the best player in a 2-for-1, as trade calculators apply), fills a position where the other team is thin, and gives you something concrete: better starters or more value. Offense only. Locked, taxi and injured players are left out. <a href="#/${esc(ctx.id)}/settings">Adjust in Settings</a>.</p></div>
+        <div class="trades">${cards || `<div class="empty">No trade fits all three tests right now. Your starters may already beat what a fair deal returns, or no team needs what you can spare. Loosen trade fairness in <a href="#/${esc(ctx.id)}/settings">Settings</a> to see more.</div>`}</div>
+      </section>`;
     }
 
     function positionsHtml() {
@@ -221,7 +247,7 @@
           </article>`;
         }).join("");
       }
-      return `<section class="section"><div class="section-head"><h2>Recommended moves</h2><p>${esc(note)}</p></div><div class="moves">${body}</div></section>`;
+      return `<section class="section"><div class="section-head"><h2>Recommended moves</h2><p>${esc(note)} <a href="#/${esc(ctx.id)}/settings">Adjust in Settings</a>.</p></div><div class="moves">${body}</div></section>`;
     }
 
     // ---------- Players ----------
@@ -331,7 +357,7 @@
       <footer>
         <p><strong>Offense.</strong> Values come from <a href="https://keeptradecut.com/dynasty-rankings" target="_blank" rel="noopener">KeepTradeCut</a> or <a href="https://dynasty-daddy.com/" target="_blank" rel="noopener">Dynasty Daddy</a>, picked in the menu at the top, in this league's format: ${esc(result.format.label)}. Superflex is used when the league has a superflex slot or two QB slots; the TE-premium level follows KeepTradeCut's own guidance (TE slots and the TE reception bonus). The other source is shown alongside for comparison. With the win-now setting above 0, each source's redraft values are blended in.</p>
         ${result.hasIdp ? `<p><strong>IDP.</strong> Neither source values defenders, so IDP value is built from Sleeper stats for the last three seasons, scored with this league's settings. This season counts most. A player's own big plays are mostly replaced by the position average for his snaps, so tackles and sacks drive value. His per-snap production is projected at the snaps he's playing now, short samples are pulled toward a replacement-level player, and value is discounted with age. It's then blended with the free <a href="https://www.fantasypros.com/nfl/rankings/dynasty-lb.php" target="_blank" rel="noopener">FantasyPros dynasty DL / LB / DB rankings</a>: the #k player there is worth what the model's #k player is worth. The unit is roughly points per game; the small number after it is points per game above a waiver-level player at his position.</p>` : ""}
-        <p><strong>Moves.</strong> A roster keeps enough players at each position to fill its dedicated starting slots plus one (${Object.entries(result.minDepth).filter(([, v]) => v).map(([g, v]) => `${v} ${g}`).join(", ")}; dual-eligible players count for both).${result.hasIdp ? " Offense and IDP are managed separately: the tuning panel sets how many active roster spots are IDP, and a move only swaps an offensive player for a defender (or back) to restore that split. Every other move stays on one side of the ball and is judged by that side's own values." : ""} Moves that fix a shortfall come first. Taxi and IR players are never dropped, and neither is anyone you lock.</p>
+        <p><strong>Moves.</strong> A roster keeps enough players at each position to fill its dedicated starting slots plus one (${Object.entries(result.minDepth).filter(([, v]) => v).map(([g, v]) => `${v} ${g}`).join(", ")}; dual-eligible players count for both).${result.hasIdp ? " Offense and IDP are managed separately: the Settings tab sets how many active roster spots are IDP, and a move only swaps an offensive player for a defender (or back) to restore that split. Every other move stays on one side of the ball and is judged by that side's own values." : ""} Moves that fix a shortfall come first. Taxi and IR players are never dropped, and neither is anyone you lock.</p>
         <p><strong>Refreshing data.</strong> Your league loads live from Sleeper every time you open it. Values${result.hasIdp ? ", IDP stats" : ""} and rankings are refreshed once a day by a scheduled GitHub Action ("Refresh data and deploy" on the repository's Actions tab).</p>
         <p>${um.length ? `Not matched to a Sleeper player: ${esc(um.join(", "))}.` : "Every ranked player was matched to a Sleeper player."}</p>
       </footer>`;
@@ -341,21 +367,20 @@
     function tabBody() {
       if (ctx.tab === "players") return playersTab();
       if (ctx.tab === "league") return leagueTab();
-      return `${tuningHtml()}<div data-r="moves" class="stack">${positionsHtml()}${movesHtml()}</div>`;
+      if (ctx.tab === "trades") return tradesTab();
+      if (ctx.tab === "settings") return settingsTab();
+      return `${positionsHtml()}${movesHtml()}`;
     }
     function draw() {
       el.innerHTML = `${headHtml()}<div data-r="summary">${summaryHtml()}</div>${DH.subtabs(ctx, TABS)}<div class="stack">${tabBody()}</div>`;
-      const ts = el.querySelector('[data-r="tuning-sum"]');
-      if (ts) ts.textContent = tuningSummary();
     }
-    // Recompute and redraw what depends on the settings, leaving the sliders alone.
+    // A slider moved: recompute, refresh the summary and readouts, leave the sliders alone.
     function redrawAfterTuning() {
       analyze();
       el.querySelector('[data-r="summary"]').innerHTML = summaryHtml();
-      el.querySelector('[data-r="moves"]').innerHTML = positionsHtml() + movesHtml();
-      const K = knobs(result);
-      for (const out of el.querySelectorAll("[data-out]")) out.textContent = K[out.dataset.out].fmt(Number(out.dataset.out === "idpSpots" ? result.cfg.idpSpots : opts()[out.dataset.out]));
-      el.querySelector('[data-r="tuning-sum"]').textContent = tuningSummary();
+      const K = { ...knobs(result), ...TRADE_KNOBS }, v = knobValues();
+      for (const out of el.querySelectorAll("[data-out]")) out.textContent = K[out.dataset.out].fmt(Number(v[out.dataset.out]));
+      el.querySelector('[data-r="settings-sum"]').textContent = settingsSummary();
     }
     const redrawPlayers = () => { const r = el.querySelector('[data-r="players"]'); if (r) r.innerHTML = playersTable(); };
     draw();
@@ -375,8 +400,6 @@
       }
       if (t.matches("[data-search]")) { view.wireQuery = t.value; view.wireShown = null; return redrawPlayers(); }
     };
-    const det = el.querySelector("[data-tuning]");
-    if (det) det.addEventListener("toggle", () => { view.tuningOpen = det.open; });
     el.onclick = (e) => {
       const b = e.target.closest("button");
       if (!b || !el.contains(b)) return;
